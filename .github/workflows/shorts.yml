@@ -1,0 +1,56 @@
+name: Daily Shorts (3 per day)
+
+on:
+  schedule:
+    - cron: "47 7 * * *"    # ~08:47 UK summer time
+    - cron: "52 11 * * *"   # ~12:52 UK
+    - cron: "43 16 * * *"   # ~17:43 UK
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: video-agent
+  cancel-in-progress: false
+
+jobs:
+  make-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          pip install -q -r requirements.txt
+      - name: Make and upload video
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
+          CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Dark History' }}
+          PRIVACY: ${{ vars.PRIVACY || 'public' }}
+        run: python agent/make_video.py --format short
+      - name: Save topic list and log
+        if: always()
+        run: |
+          git config user.name "dark-history-agent"
+          git config user.email "agent@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet || (git commit -m "Log short video" && git pull --rebase && git push)
+      - name: Keep a copy of the video (7 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: short-video
+          path: out/
+          retention-days: 7
