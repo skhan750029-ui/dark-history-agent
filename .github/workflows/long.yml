@@ -21,10 +21,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: kokoro-voice-v1
       - name: Install tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core espeak-ng
+          pip install -q torch --index-url https://download.pytorch.org/whl/cpu
           pip install -q -r requirements.txt
       - name: Make and upload video
         env:
@@ -38,6 +43,7 @@ jobs:
           ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
           CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Dark History' }}
           PRIVACY: ${{ vars.PRIVACY || 'public' }}
+          KOKORO_VOICE: ${{ vars.KOKORO_VOICE || 'am_michael' }}
         run: python agent/make_video.py --format long
       - name: Save topic list and log
         if: always()
