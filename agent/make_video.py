@@ -24,7 +24,8 @@ Settings come from environment variables (GitHub Secrets):
   ELEVENLABS_VOICE_ID optional
   CHANNEL_NAME        optional  default "Dark History"
   PRIVACY             optional  public | unlisted | private (default public)
-  VOICE               optional  edge-tts voice (default en-US-ChristopherNeural)
+  KOKORO_VOICE        optional  narrator voice (default am_michael; e.g. bm_george, am_onyx)
+  VOICE               optional  edge-tts voice, only used if USE_EDGE_TTS=1
 """
 import argparse
 import asyncio
@@ -282,6 +283,29 @@ async def _edge(text, path):
     await c.save(str(path))
 
 
+_KOKORO = {}
+
+
+def kokoro_tts(text, path):
+    """Free, natural neural voice that runs inside GitHub Actions (no API, no limits)."""
+    import numpy as np
+    import soundfile as sf
+    from kokoro import KPipeline
+    voice = os.getenv("KOKORO_VOICE", "am_michael")
+    lang = voice[0] if voice[0] in "ab" else "a"
+    if lang not in _KOKORO:
+        _KOKORO[lang] = KPipeline(lang_code=lang, repo_id="hexgrad/Kokoro-82M")
+    speed = float(os.getenv("KOKORO_SPEED", "0.95"))
+    chunks = [np.asarray(a, dtype="float32") for _, _, a in _KOKORO[lang](text, voice=voice, speed=speed)
+              if a is not None]
+    if not chunks:
+        raise RuntimeError("Kokoro returned no audio")
+    wav = path.with_suffix(".k.wav")
+    sf.write(str(wav), np.concatenate(chunks), 24000)
+    run(["ffmpeg", "-y", "-i", str(wav), "-c:a", "libmp3lame", "-q:a", "2", str(path)])
+    wav.unlink(missing_ok=True)
+
+
 def tts(text, path, offline=False):
     if offline:  # silent placeholder of a realistic length
         sec = max(2.0, len(text.split()) / 2.4)
@@ -301,14 +325,20 @@ def tts(text, path, offline=False):
             return
         except Exception as e:
             log(f"ElevenLabs failed, using free voice: {e}")
-    for i in range(3):
+    if os.getenv("USE_EDGE_TTS", "").lower() in ("1", "true", "yes"):
         try:
             asyncio.run(_edge(text, path))
             if path.exists() and path.stat().st_size > 1000:
                 return
         except Exception as e:
-            log(f"edge-tts retry {i + 1}: {e}")
-            time.sleep(4)
+            log(f"edge-tts failed, using Kokoro: {str(e)[:120]}")
+    for i in range(2):
+        try:
+            kokoro_tts(text, path)
+            return
+        except Exception as e:
+            log(f"Kokoro retry {i + 1}: {e}")
+            time.sleep(2)
     raise RuntimeError("Voice generation failed")
 
 
