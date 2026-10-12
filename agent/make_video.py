@@ -248,6 +248,7 @@ STEP 3 - Packaging:
 - "hashtags": 3-4 hashtags.
 - "topic": the short name of the event (used to avoid repeats).
 
+Inside JSON string values never use double quotes (use single quotes instead).
 Return ONLY JSON inside a ```json code block with exactly this shape:
 {{"topic": "...", "title": "...", "thumbnail_text": "...", "description": "...",
   "tags": ["..."], "hashtags": ["#history"],
@@ -267,7 +268,7 @@ Return ONLY JSON inside a ```json code block with exactly this shape:
             log(f"Script: '{s['title']}' ({words} words, {len(s['scenes'])} scenes)")
             if s["topic"].strip().lower() in (t.lower() for t in done):
                 raise ValueError("repeated topic")
-            if words < lo * 0.7:
+            if words < lo * 0.85:
                 raise ValueError(f"too short: {words} words")
             return s
         except Exception as e:
@@ -676,6 +677,29 @@ def thumbnail(script, imgs, work):
     return out
 
 
+def preview(video, thumb, total, fmt):
+    """Small contact sheet (4 frames + thumbnail) saved in data/previews to check quality."""
+    try:
+        frames = []
+        for k, frac in enumerate((0.05, 0.3, 0.6, 0.9)):
+            fp = video.parent / f"pv_{k}.jpg"
+            run(["ffmpeg", "-y", "-ss", f"{total * frac:.2f}", "-i", str(video), "-frames:v", "1",
+                 "-vf", "scale=-2:640", str(fp)])
+            frames.append(Image.open(fp).convert("RGB"))
+        th = Image.open(thumb).convert("RGB")
+        th = th.resize((int(th.width * 640 / th.height), 640))
+        W = sum(f.width for f in frames) + th.width + 10 * 5
+        sheet = Image.new("RGB", (W, 660), (20, 20, 20))
+        x = 10
+        for im in frames + [th]:
+            sheet.paste(im, (x, 10))
+            x += im.width + 10
+        (DATA / "previews").mkdir(parents=True, exist_ok=True)
+        sheet.save(DATA / "previews" / f"latest_{fmt}.jpg", quality=80)
+    except Exception as e:
+        log(f"Preview skipped: {e}")
+
+
 # ---------------------------------------------------------------- 6. YOUTUBE
 
 def yt_token():
@@ -763,6 +787,11 @@ def main():
     thumb = thumbnail(script, imgs, work)
     (work / "description.txt").write_text(build_description(script, credits, a.format), encoding="utf-8")
     log(f"Video ready: {final} ({total:.1f}s)")
+    preview(final, thumb, total, a.format)
+    # keep only final outputs (smaller download, frees disk before upload)
+    for p in work.iterdir():
+        if p.name not in ("final.mp4", "thumb.jpg", "script.json", "description.txt", "subs.ass"):
+            p.unlink(missing_ok=True)
 
     vid, status = "", "not uploaded"
     if not (a.offline or a.no_upload):
@@ -774,10 +803,6 @@ def main():
         with open(DATA / "upload_log.csv", "a", encoding="utf-8") as f:
             f.write(f"{dt.datetime.now(dt.timezone.utc).isoformat()},{a.format},\"{script['title']}\","
                     f"{status},{'https://youtu.be/' + vid if vid else ''}\n")
-    # keep only final outputs to save space
-    for p in work.iterdir():
-        if p.name not in ("final.mp4", "thumb.jpg", "script.json", "description.txt", "subs.ass"):
-            p.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
