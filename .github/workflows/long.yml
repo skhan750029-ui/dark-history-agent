@@ -29,6 +29,61 @@ jobs:
       - name: Make and upload video
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
+          CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Dark History' }}
+          PRIVACY: ${{ vars.PRIVACY || 'public' }}
+        run: python agent/make_video.py --format long
+      - name: Save topic list and log
+        if: always()
+        run: |
+          git config user.name "dark-history-agent"
+          git config user.email "agent@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet || (git commit -m "Log long video" && git pull --rebase && git push)
+      - name: Keep a copy of the video (7 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: long-video
+          path: out/
+          retention-days: 7
+name: Daily Long Video (1 per day)
+
+on:
+  schedule:
+    - cron: "13 18 * * *"   # ~19:13 UK summer time
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: video-agent
+  cancel-in-progress: false
+
+jobs:
+  make-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          pip install -q -r requirements.txt
+      - name: Make and upload video
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
