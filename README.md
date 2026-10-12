@@ -42,4 +42,3 @@ Bani hui video har run ke neeche "Artifacts" mein 7 din tak download ke liye reh
 - Google Cloud ki OAuth consent screen ko **"In production"** par rakhein, warna token 7 din mein expire ho jata hai.
 - Long videos par custom thumbnail ke liye channel ko phone se verify karein (youtube.com/verify).
 - Agar 60 din tak repo mein koi activity na ho to GitHub schedule band kar deta hai. Agent khud roz commit karta hai, is liye yeh masla nahi hona chahiye.
-# dark-history-agent
