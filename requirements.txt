@@ -1,2 +1,5 @@
 edge-tts>=7.0.0
 pillow>=10
+kokoro>=0.9.4
+soundfile
+numpy
