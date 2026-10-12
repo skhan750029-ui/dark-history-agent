@@ -39,6 +39,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -117,26 +118,42 @@ def used_topics():
     return [l.strip() for l in f.read_text(encoding="utf-8").splitlines() if l.strip()] if f.exists() else []
 
 
-def groq(prompt):
-    """Free alternative to Gemini (console.groq.com). groq/compound can search the web."""
+def groq(prompt, json_only=False):
+    """Free alternative to Gemini (console.groq.com). gpt-oss models can search the web."""
     key = os.environ["GROQ_API_KEY"]
-    models = [m for m in [os.getenv("GROQ_MODEL"), "groq/compound", "openai/gpt-oss-120b",
+    models = [m for m in [os.getenv("GROQ_MODEL"), "openai/gpt-oss-120b", "openai/gpt-oss-20b",
+                          "moonshotai/kimi-k2-instruct-0905", "qwen/qwen3-32b",
                           "llama-3.3-70b-versatile"] if m]
     last = None
     for model in models:
-        try:
-            r = http("https://api.groq.com/openai/v1/chat/completions",
-                     {"model": model, "temperature": 0.9,
-                      "messages": [{"role": "user", "content": prompt}]},
-                     headers={"Authorization": f"Bearer {key}"}, timeout=240)
-            txt = r["choices"][0]["message"]["content"] or ""
-            if txt.strip():
-                log(f"Groq ok ({model})")
-                return txt
-        except Exception as e:
-            last = e
-            log(f"Groq {model} failed: {str(e)[:150]}")
-            time.sleep(3)
+        search_opts = [True, False] if ("gpt-oss" in model and not json_only) else [False]
+        for search in search_opts:
+            body = {"model": model, "temperature": 0.8,
+                    "messages": [{"role": "user", "content": prompt}]}
+            if search:
+                body["tools"] = [{"type": "browser_search"}]
+            else:
+                body["response_format"] = {"type": "json_object"}
+            for attempt in range(3):
+                try:
+                    r = http("https://api.groq.com/openai/v1/chat/completions", body,
+                             headers={"Authorization": f"Bearer {key}"}, timeout=240)
+                    txt = r["choices"][0]["message"]["content"] or ""
+                    if txt.strip():
+                        log(f"Groq ok ({model}, search={search})")
+                        return txt
+                    break
+                except urllib.error.HTTPError as e:
+                    last = e
+                    log(f"Groq {model} search={search} failed: {e}")
+                    if e.code == 429:
+                        time.sleep(25 * (attempt + 1))
+                        continue
+                    break
+                except Exception as e:
+                    last = e
+                    log(f"Groq {model} search={search} failed: {str(e)[:150]}")
+                    break
     raise RuntimeError(f"Groq failed: {last}")
 
 
@@ -236,7 +253,15 @@ Return ONLY JSON inside a ```json code block with exactly this shape:
   "scenes": [{{"text": "...", "image_query": "...", "mood_query": "..."}}]}}"""
     for attempt in range(3):
         try:
-            s = extract_json(llm(prompt))
+            raw = llm(prompt)
+            try:
+                s = extract_json(raw)
+            except Exception as e:
+                log(f"JSON broken ({e}), asking AI to repair it")
+                fix = ("Convert the following into ONE strictly valid JSON object with keys topic, "
+                       "title, thumbnail_text, description, tags, hashtags, scenes (each scene: text, "
+                       "image_query, mood_query). Keep all the wording. Output only JSON.\n\n" + raw)
+                s = extract_json(groq(fix, json_only=True) if os.getenv("GROQ_API_KEY") else llm(fix))
             words = sum(len(sc["text"].split()) for sc in s["scenes"])
             log(f"Script: '{s['title']}' ({words} words, {len(s['scenes'])} scenes)")
             if s["topic"].strip().lower() in (t.lower() for t in done):
