@@ -12,7 +12,7 @@ animated edit (camera moves, light flicker, dust, grain) -> music with ducking
 Secrets (GitHub -> Settings -> Secrets -> Actions):
   GROQ_API_KEY or GEMINI_API_KEY   AI writer
   GOOGLE_TTS_KEY                   Google Text-to-Speech API key (Urdu voice)
-  PEXELS_API_KEY                   free stock videos (optional but recommended)
+  PEXELS_API_KEY / PIXABAY_API_KEY free stock videos (optional but recommended)
   CF_ACCOUNT_ID + CF_API_TOKEN     Cloudflare Workers AI images (optional)
   YT_CLIENT_ID / YT_CLIENT_SECRET / YT_REFRESH_TOKEN   YouTube upload
 Variables (optional): CHANNEL_NAME, PRIVACY, TTS_VOICE, LONG_MINUTES, SHORTS_COUNT
@@ -44,7 +44,8 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 OUT = ROOT / "out"
 MUSIC_DIR = ROOT / "assets" / "music"
-UA = "DarkHistoryStudio/2.0 (faceless educational history channel)"
+UA = ("DarkHistoryStudio/2.1 (https://github.com/skhan750029-ui/dark-history-agent; "
+      "educational history channel) python-urllib")
 
 CHANNEL = os.getenv("CHANNEL_NAME", "Dark History")
 PRIVACY = (os.getenv("PRIVACY") or "public").strip().lower()
@@ -323,10 +324,22 @@ def commons(query, used):
     q = urllib.parse.quote(f"{query} filetype:bitmap")
     url = ("https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search"
            f"&gsrsearch={q}&gsrnamespace=6&gsrlimit=12&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=2400")
-    try:
-        pages = http(url, timeout=40).get("query", {}).get("pages", {})
-    except Exception as e:
-        log(f"Commons failed '{query}': {e}")
+    pages = None
+    for attempt in range(4):
+        try:
+            time.sleep(1.2)  # be polite to Wikimedia (avoids HTTP 429)
+            pages = http(url, timeout=40).get("query", {}).get("pages", {})
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                time.sleep(8 * (attempt + 1))
+                continue
+            log(f"Commons failed '{query}': {e}")
+            return None
+        except Exception as e:
+            log(f"Commons failed '{query}': {e}")
+            return None
+    if pages is None:
         return None
     for p in sorted(pages.values(), key=lambda p: p.get("index", 99)):
         ii = (p.get("imageinfo") or [{}])[0]
@@ -365,6 +378,53 @@ def pexels_video(query, used):
         f = sorted(files, key=lambda f: f["width"])[0]
         return v["id"], f["link"], f"Video by {v.get('user', {}).get('name', 'Pexels')} on Pexels"
     return None
+
+
+def pixabay_video(query, used):
+    key = os.getenv("PIXABAY_API_KEY")
+    if not key:
+        return None
+    url = (f"https://pixabay.com/api/videos/?key={key}&safesearch=true&per_page=20&q="
+           + urllib.parse.quote(query[:100]))
+    try:
+        hits = http(url, timeout=40).get("hits", [])
+    except Exception as e:
+        log(f"Pixabay failed '{query}': {e}")
+        return None
+    for v in hits:
+        vid = f"pb{v['id']}"
+        if vid in used or v.get("duration", 0) < 4:
+            continue
+        files = v.get("videos", {})
+        for size in ("medium", "large", "small"):
+            f = files.get(size) or {}
+            if f.get("url") and 1200 <= (f.get("width") or 0) <= 2600:
+                return vid, f["url"], f"Video by {v.get('user', 'Pixabay')} on Pixabay"
+    return None
+
+
+def pixabay_image(query, used):
+    key = os.getenv("PIXABAY_API_KEY")
+    if not key:
+        return None
+    url = (f"https://pixabay.com/api/?key={key}&safesearch=true&per_page=20&orientation=horizontal"
+           f"&min_width=1600&q=" + urllib.parse.quote(query[:100]))
+    try:
+        hits = http(url, timeout=40).get("hits", [])
+    except Exception as e:
+        log(f"Pixabay image failed '{query}': {e}")
+        return None
+    for h in hits:
+        src = h.get("largeImageURL")
+        if src and src not in used:
+            return src, f"Image by {h.get('user', 'Pixabay')} on Pixabay"
+    return None
+
+
+def stock_video(query, used):
+    q2 = " ".join(query.split()[:2])
+    return (pexels_video(query, used) or pixabay_video(query, used)
+            or pexels_video(q2, used) or pixabay_video(q2, used))
 
 
 def ai_image(prompt, path, seed):
@@ -427,7 +487,7 @@ def gather_visuals(scenes, work, offline):
             for kind in order:
                 try:
                     if kind == "video" and sc.get("query"):
-                        got = pexels_video(sc["query"], used_vid) or pexels_video(" ".join(sc["query"].split()[:2]), used_vid)
+                        got = stock_video(sc["query"], used_vid)
                         if got:
                             p = work / f"v_{i:03d}.mp4"
                             download(got[1], p)
@@ -438,6 +498,14 @@ def gather_visuals(scenes, work, offline):
                         p = work / f"i_{i:03d}.jpg"
                         if ai_image(sc["prompt"], p, 1000 + i):
                             sc["asset"], sc["kind"] = p, "image"
+                        elif sc.get("query"):
+                            got = pixabay_image(sc["query"], used_img) or pixabay_image(" ".join(sc["query"].split()[:2]), used_img)
+                            if got:
+                                download(got[0], p)
+                                Image.open(p).convert("RGB").save(p, quality=94)
+                                used_img.add(got[0])
+                                credits.append(got[1])
+                                sc["asset"], sc["kind"] = p, "image"
                     elif kind == "archive":
                         q = sc.get("archive") or sc.get("query", "")
                         got = commons(q, used_img) if q else None
@@ -452,17 +520,21 @@ def gather_visuals(scenes, work, offline):
                     log(f"Scene {i} {kind} failed: {e}")
                 if sc["asset"]:
                     break
-        if not sc["asset"]:
-            prev = [s for s in scenes[:i] if s.get("asset")]
-            if prev and not offline:
-                src = prev[(i * 7) % len(prev)]
-                sc["asset"], sc["kind"] = src["asset"], src["kind"]
-            else:
-                p = work / f"p_{i:03d}.jpg"
-                placeholder(p, sc.get("query") or sc.get("archive") or "history", i)
-                sc["asset"], sc["kind"] = p, "image"
+        if not sc["asset"] and offline:
+            p = work / f"p_{i:03d}.jpg"
+            placeholder(p, sc.get("query") or sc.get("archive") or "history", i)
+            sc["asset"], sc["kind"] = p, "image"
         if i % 10 == 0:
             log(f"Visuals {i + 1}/{len(scenes)}")
+    real = [s for s in scenes if s.get("asset")]
+    log(f"Real visuals found for {len(real)}/{len(scenes)} scenes")
+    if not offline and len(real) < max(5, 0.5 * len(scenes)):
+        raise RuntimeError(f"Only {len(real)} real visuals found - refusing to make a low-quality video. "
+                           "Add PIXABAY_API_KEY / CF_ACCOUNT_ID + CF_API_TOKEN secrets.")
+    for i, sc in enumerate(scenes):  # fill gaps by re-using real footage (different crop/motion)
+        if not sc.get("asset"):
+            src = real[(i * 7) % len(real)]
+            sc["asset"], sc["kind"] = src["asset"], src["kind"]
     return list(dict.fromkeys(credits))
 
 
