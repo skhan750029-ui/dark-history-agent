@@ -454,7 +454,7 @@ def ai_image(prompt, path, seed):
         for attempt in range(3):
             try:
                 r = http(f"https://api.cloudflare.com/client/v4/accounts/{acc}/ai/run/{model}",
-                         {"prompt": full, "steps": 6, "seed": seed},
+                         {"prompt": full, "steps": 6},
                          headers={"Authorization": f"Bearer {tok}"}, timeout=120)
                 img = r.get("result", {}).get("image")
                 if img:
