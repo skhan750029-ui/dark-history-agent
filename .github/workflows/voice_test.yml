@@ -1,0 +1,29 @@
+name: Voice Test (samples)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  voices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Make voice samples
+        env:
+          GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python agent/voice_test.py
+      - name: Save samples
+        run: |
+          git config user.name "dark-history-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/voice_samples || true
+          git commit -m "Voice samples" || echo "nothing to commit"
+          git pull --rebase || true
+          git push || true
