@@ -205,18 +205,31 @@ def used_topics():
     return [l.strip() for l in f.read_text(encoding="utf-8").splitlines() if l.strip()] if f.exists() else []
 
 
-VISUAL_RULES = """For every scene choose the visual:
-- "type": "video" (real stock footage: atmosphere, places, nature, objects, crowds from behind,
-  candles, fog, old streets, rain, sea, desert, ruins, hands, documents, fire...),
-  "image" (a cinematic AI picture of the exact historical moment: people in period clothes,
-  rooms, events - write it like a film still), or
-  "archive" (a real historical photo/painting/map of a named person, place or object).
-  Mix them: about 40% video, 45% image, 15% archive. Never two "archive" in a row.
-- "query": 2-4 simple English words for stock-footage search (e.g. "foggy forest night").
-- "prompt": English prompt for the AI picture: subject, era, place, action, lighting, camera.
-  Always photorealistic cinematic film still, moody low-key lighting, 35mm, shallow depth of field.
-  No text, no logos, no gore, no real celebrities' faces in close-up.
+VISUAL_RULES = """The picture on screen MUST show exactly what the narration of that scene says,
+in the correct era and place of the story. For every scene choose the visual:
+- "type": "image" (a cinematic AI picture of the exact moment: people in period clothes,
+  ships, rooms, letters, events - write it like a film still) - use this for about 75% of scenes,
+  "archive" (a real historical photo/painting/map of a named person, place or object) - about 15%,
+  "video" (real stock footage) - ONLY about 10%, and ONLY for timeless nature/atmosphere that fits
+  the era (stormy sea, waves, fog, rain, fire, candle, desert, forest at night, clouds).
+  NEVER video of modern things (cities, lights, cars, concerts, phones, offices, modern people).
+  Never two "archive" in a row.
+- "prompt": ALWAYS write it, for every scene (also video/archive scenes, as a backup):
+  English prompt for the AI picture showing this scene's exact content: subject, era/year, place,
+  action, clothing, lighting, camera angle. Photorealistic cinematic film still, moody low-key
+  lighting, 35mm. No text, no logos, no gore, no real celebrities' faces in close-up.
+- "query": 2-4 simple English words for stock-footage search (e.g. "stormy ocean night").
 - "archive": 2-5 English words to search Wikimedia Commons (names, places, years)."""
+
+MODERN = {"city", "cities", "urban", "skyline", "concert", "neon", "party", "club", "car", "cars",
+          "traffic", "phone", "smartphone", "computer", "laptop", "office", "business", "technology",
+          "drone", "highway", "skyscraper", "festival", "disco", "led", "stage", "selfie", "airplane",
+          "aircraft", "bridge", "nightlife", "lights", "fashion", "model", "woman", "man", "girl", "boy"}
+
+
+def looks_modern(tags):
+    words = set(re.split(r"[^a-z]+", (tags or "").lower()))
+    return bool(words & MODERN)
 
 
 def write_story(minutes):
@@ -238,6 +251,7 @@ Plan a {minutes:.0f}-minute documentary with {n_ch} chapters. Return ONLY JSON:
 {{"topic": "short English name of the story",
   "title": "English YouTube title, max 70 chars, curiosity + truthful, may use one CAPS word",
   "thumbnail_text": "2-4 English words, punchy",
+  "setting": "visual setting for all pictures: year/era, place, period details (e.g. 1909, steamship era, stormy Indian Ocean off South Africa, Edwardian clothing)",
   "thumbnail_prompt": "English prompt for a dramatic photorealistic cinematic thumbnail image of the story's key moment, no text",
   "description": "English description: 2 short hook paragraphs + 'Sources:' with 2-4 real sources",
   "tags": ["12-15 English SEO tags"],
@@ -393,7 +407,7 @@ def pixabay_video(query, used):
         return None
     for v in hits:
         vid = f"pb{v['id']}"
-        if vid in used or v.get("duration", 0) < 4:
+        if vid in used or v.get("duration", 0) < 4 or looks_modern(v.get("tags")):
             continue
         files = v.get("videos", {})
         for size in ("medium", "large", "small"):
@@ -416,7 +430,7 @@ def pixabay_image(query, used):
         return None
     for h in hits:
         src = h.get("largeImageURL")
-        if src and src not in used:
+        if src and src not in used and not looks_modern(h.get("tags")):
             return src, f"Image by {h.get('user', 'Pixabay')} on Pixabay"
     return None
 
@@ -427,11 +441,14 @@ def stock_video(query, used):
             or pexels_video(q2, used) or pixabay_video(q2, used))
 
 
+SETTING = ""
+
+
 def ai_image(prompt, path, seed):
     acc, tok = os.getenv("CF_ACCOUNT_ID"), os.getenv("CF_API_TOKEN")
     if not (acc and tok):
         return False
-    full = (prompt + ", photorealistic cinematic film still, dramatic moody lighting, 35mm film, "
+    full = (prompt + (f". Setting: {SETTING}" if SETTING else "") + ", photorealistic cinematic film still, dramatic moody lighting, 35mm film, "
             "high detail, muted colors, 16:9 composition")[:2000]
     for model in [os.getenv("CF_IMAGE_MODEL") or "@cf/black-forest-labs/flux-1-schnell"]:
         for attempt in range(3):
@@ -478,10 +495,13 @@ def download(url, path):
 
 def gather_visuals(scenes, work, offline):
     used_img, used_vid, credits = set(), set(), []
+    ai_ok = 0
     for i, sc in enumerate(scenes):
         want = sc.get("type", "image")
         order = {"video": ["video", "image", "archive"], "image": ["image", "archive", "video"],
-                 "archive": ["archive", "image", "video"]}.get(want, ["image", "video", "archive"])
+                 "archive": ["archive", "image", "video"]}.get(want, ["image", "archive", "video"])
+        if not sc.get("prompt"):
+            sc["prompt"] = sc.get("query") or sc.get("archive") or ""
         sc["asset"], sc["kind"] = None, None
         if not offline:
             for kind in order:
@@ -498,6 +518,7 @@ def gather_visuals(scenes, work, offline):
                         p = work / f"i_{i:03d}.jpg"
                         if ai_image(sc["prompt"], p, 1000 + i):
                             sc["asset"], sc["kind"] = p, "image"
+                            ai_ok += 1
                         elif sc.get("query"):
                             got = pixabay_image(sc["query"], used_img) or pixabay_image(" ".join(sc["query"].split()[:2]), used_img)
                             if got:
@@ -527,7 +548,7 @@ def gather_visuals(scenes, work, offline):
         if i % 10 == 0:
             log(f"Visuals {i + 1}/{len(scenes)}")
     real = [s for s in scenes if s.get("asset")]
-    log(f"Real visuals found for {len(real)}/{len(scenes)} scenes")
+    log(f"Real visuals found for {len(real)}/{len(scenes)} scenes (AI pictures: {ai_ok})")
     if not offline and len(real) < max(5, 0.5 * len(scenes)):
         raise RuntimeError(f"Only {len(real)} real visuals found - refusing to make a low-quality video. "
                            "Add PIXABAY_API_KEY / CF_ACCOUNT_ID + CF_API_TOKEN secrets.")
@@ -606,7 +627,7 @@ def make_dust(path, seconds=8):
 def make_score(total, path, seed):
     """Original dark cinematic bed (no copyright): minor-key pads, swells and low hits."""
     rnd = random.Random(seed)
-    root = rnd.choice([55.0, 58.27, 61.74, 65.41, 49.0])
+    root = rnd.choice([110.0, 116.54, 123.47, 130.81, 98.0])
     m3, p5, oc = root * 1.189, root * 1.498, root * 2
     pad = (f"0.18*sin(2*PI*{root}*t)+0.14*sin(2*PI*{m3 * 2:.2f}*t)*(0.6+0.4*sin(2*PI*0.05*t))"
            f"+0.12*sin(2*PI*{p5 * 2:.2f}*t)*(0.6+0.4*sin(2*PI*0.037*t+1))"
@@ -621,18 +642,46 @@ def make_score(total, path, seed):
          "-filter_complex",
          "[0]aecho=0.8:0.7:420|780:0.35|0.25,lowpass=f=3200[p];[1]lowpass=f=160[h];"
          "[2]bandpass=f=900:w=600,volume=0.5[n];[p][h][n]amix=inputs=3:normalize=0,"
-         f"afade=t=in:d=3,afade=t=out:st={max(0, total - 4):.2f}:d=4,volume=0.9[a]",
+         f"afade=t=in:d=3,afade=t=out:st={max(0, total - 4):.2f}:d=4,loudnorm=I=-24:TP=-3,aresample=44100[a]",
          "-map", "[a]", "-ac", "2", "-c:a", "pcm_s16le", path])
+
+
+MACLEOD = ["Darkest Child", "Long Note Two", "Long Note Four", "Ghost Story", "Unseen Horrors",
+           "Lightless Dawn", "Gathering Darkness", "Echoes of Time v2", "Dark Fog", "Ossuary 6 - Air",
+           "Spacial Winds", "Static Motion", "Dark Walk", "Mistake the Getaway"]
+MUSIC_CREDIT = []
+
+
+def fetch_music(work, seed):
+    """Download one dark royalty-free track (Kevin MacLeod, incompetech.com, CC BY 4.0)."""
+    names = MACLEOD[:]
+    random.Random(seed).shuffle(names)
+    for name in names:
+        url = ("https://incompetech.com/music/royalty-free/mp3-royaltyfree/"
+               + urllib.parse.quote(name) + ".mp3")
+        try:
+            body, hd = http(url, raw=True, timeout=90,
+                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+            if len(body) > 300_000:
+                p = work / "track.mp3"
+                p.write_bytes(body)
+                MUSIC_CREDIT.append(f'Music: "{name}" Kevin MacLeod (incompetech.com) - '
+                                    "Licensed under Creative Commons: By Attribution 4.0 License")
+                return p
+        except Exception as e:
+            log(f"Music download failed '{name}': {e}")
+    return None
 
 
 def pick_music(total, work, seed):
     tracks = sorted(MUSIC_DIR.glob("*.mp3")) + sorted(MUSIC_DIR.glob("*.wav")) if MUSIC_DIR.exists() else []
     out = work / "music.wav"
-    if tracks:
-        t = random.Random(seed).choice(tracks)
-        log(f"Music: {t.name}")
+    t = random.Random(seed).choice(tracks) if tracks else fetch_music(work, seed)
+    if t:
+        log(f"Music: {t.name} {MUSIC_CREDIT[-1:] }")
         run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", t, "-t", f"{total + 1:.2f}",
-             "-af", f"afade=t=in:d=2,afade=t=out:st={max(0, total - 4):.2f}:d=4",
+             "-af", f"loudnorm=I=-24:TP=-3,aresample=44100,"
+                    f"afade=t=in:d=2,afade=t=out:st={max(0, total - 4):.2f}:d=4",
              "-ac", "2", "-ar", "44100", out])
     else:
         log("Music: generated score (add tracks to assets/music for real music)")
@@ -731,7 +780,7 @@ def render_long(story, work, offline):
           f"vignette=PI/5,noise=alls=7:allf=t+u,fade=t=in:d=1,fade=t=out:st={max(0, total - 1.2):.2f}:d=1.2[v];"
           "[2:a]highpass=f=70,acompressor=threshold=-18dB:ratio=3:attack=5:release=150,"
           "loudnorm=I=-15:TP=-1.5:LRA=9,aresample=44100,asplit=2[vo][sc];"
-          "[3:a]volume=0.55[mu];[mu][sc]sidechaincompress=threshold=0.03:ratio=10:attack=30:release=600[duck];"
+          "[3:a]volume=0.8[mu];[mu][sc]sidechaincompress=threshold=0.06:ratio=3:attack=40:release=700[duck];"
           "[vo][duck]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[a]")
     run(["ffmpeg", "-y", "-i", work / "visual.mp4", "-stream_loop", "-1", "-i", dust, "-i", work / "voice.wav",
          "-i", music, "-filter_complex", fc, "-map", "[v]", "-map", "[a]",
@@ -870,7 +919,7 @@ def description(story, credits, extra=""):
     return (f"{story['description'].strip()}\n\n{extra}"
             f"Subscribe to {CHANNEL} for the stories history tried to forget.\n\n"
             f"Narration: Urdu. Some scenes are AI-generated illustrations of historical events.\n"
-            f"Footage & images:\n{cred}\n\n{tags}")
+            f"Footage & images:\n{cred}\n" + "".join(c + "\n" for c in MUSIC_CREDIT) + f"\n{tags}")
 
 
 # =============================================================== MAIN
@@ -921,6 +970,8 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     (work / "story.json").write_text(json.dumps(story, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
 
+    global SETTING
+    SETTING = (story.get("setting") or "").strip()[:300]
     long_v, credits, starts, durs, total = render_long(story, work, a.offline)
     thumb = thumbnail(story, work, a.offline)
     shorts = []
