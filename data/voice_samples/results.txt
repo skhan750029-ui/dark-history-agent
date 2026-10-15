@@ -1,0 +1,9 @@
+OK   1_old_chirp_charon_slow.mp3  (34.296000 s)
+OK   2_chirp_charon_faster.mp3  (29.280000 s)
+FAIL 3_gemini_pro_urdu_charon: HTTP 403 b'{\n  "error": {\n    "code": 403,\n    "message": "Agent Platform API has not been used in project 727781403285 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview?project=727781403285 then retry. If you enabled this API rece'
+FAIL 4_gemini_flash_urdu_orus: HTTP 403 b'{\n  "error": {\n    "code": 403,\n    "message": "Agent Platform API has not been used in project 727781403285 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview?project=727781403285 then retry. If you enabled this API rece'
+FAIL 5_gemini_31_urdu_charon: HTTP 403 b'{\n  "error": {\n    "code": 403,\n    "message": "Agent Platform API has not been used in project 727781403285 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview?project=727781403285 then retry. If you enabled this API rece'
+FAIL 6_gemini_pro_hindi_charon: HTTP 403 b'{\n  "error": {\n    "code": 403,\n    "message": "Agent Platform API has not been used in project 727781403285 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview?project=727781403285 then retry. If you enabled this API rece'
+SKIP 7_gemini_api_charon: no GEMINI_API_KEY
+MUSIC Darkest Child: 9551329 bytes, type application/octet-stream
+MIX  8_best_voice_with_music.mp3 from 2_chirp_charon_faster.mp3
