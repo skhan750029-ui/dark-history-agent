@@ -221,6 +221,13 @@ in the correct era and place of the story. For every scene choose the visual:
 - "query": 2-4 simple English words for stock-footage search (e.g. "stormy ocean night").
 - "archive": 2-5 English words to search Wikimedia Commons (names, places, years)."""
 
+SFX_RULES = """Sound design for every scene (like a real documentary editor):
+- "sfx": the real background sound of what is on screen, 1-3 simple English words, e.g.
+  "steam train", "snow wind", "heavy rain", "thunder storm", "ocean waves", "crackling fire",
+  "clock ticking", "heartbeat", "footsteps wood", "door creak", "crowd murmur", "horse carriage",
+  "church bells", "forest night", "dark drone". Use "none" only when silence is more powerful.
+- "hit": true ONLY for a shocking reveal / twist / scary moment (about 1 in 6 scenes), else false."""
+
 MODERN = {"city", "cities", "urban", "skyline", "concert", "neon", "party", "club", "car", "cars",
           "traffic", "phone", "smartphone", "computer", "laptop", "office", "business", "technology",
           "drone", "highway", "skyscraper", "festival", "disco", "led", "stage", "selfie", "airplane",
@@ -278,10 +285,13 @@ everyday Urdu like a popular storyteller; English words only for names/places/te
 Style: suspenseful, emotional, short sentences, questions to the viewer, cliffhanger at the end
 of the chapter. {'Start with a powerful 2-sentence hook, then a quick "is video mein..." promise.' if first else 'Continue smoothly, do not greet again.'}
 {'End with a chilling final thought, then ask viewers to like, comment and subscribe to ' + CHANNEL + '.' if last else ''}
+Write it to be PERFORMED, not read: use "..." for dramatic pauses, "!" for shock, "?" for questions
+to the viewer, and words of emotion (achanak, khaufnak, yaqeen nahi aata...).
 Split into scenes of 1-2 sentences (8-14 seconds each when spoken).
 {VISUAL_RULES}
+{SFX_RULES}
 Return ONLY JSON: {{"scenes": [{{"ur": "Urdu narration", "type": "video|image|archive",
-"query": "...", "prompt": "...", "archive": "..."}}]}}""", keys=("scenes",))
+"query": "...", "prompt": "...", "archive": "...", "sfx": "...", "hit": false}}]}}""", keys=("scenes",))
         for sc in part["scenes"]:
             if sc.get("ur", "").strip():
                 sc["chapter"] = i
@@ -295,14 +305,68 @@ Return ONLY JSON: {{"scenes": [{{"ur": "Urdu narration", "type": "video|image|ar
 
 # =============================================================== 2. VOICE (Google TTS)
 
+GEMINI_TTS = {"on": bool(os.getenv("GEMINI_API_KEY")) and (os.getenv("TTS_ENGINE") or "gemini") == "gemini",
+              "fails": 0}
+VOICE_STYLE = ("You are a famous Urdu dark-history and true-crime storyteller on YouTube. Narrate this in "
+               "natural, fluent Urdu with real emotion and suspense, at a confident natural pace (never slow, "
+               "never like reading from paper): dramatic pauses at '...', a lower, almost whispering voice for "
+               "scary parts, shock and surprise at '!', and a direct questioning tone when asking the viewer.")
+
+
+def gemini_tts(text, path):
+    """Expressive Gemini voice (AI Studio key). Returns False to fall back to the normal Google voice."""
+    key = os.getenv("GEMINI_API_KEY")
+    voice = os.getenv("GEMINI_VOICE") or "Charon"
+    for model in [os.getenv("GEMINI_TTS_MODEL") or "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"]:
+        body = {"contents": [{"parts": [{"text": VOICE_STYLE + "\n\nText:\n" + text}]}],
+                "generationConfig": {"responseModalities": ["AUDIO"], "speechConfig": {
+                    "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}}
+        for attempt in range(5):
+            try:
+                r = http(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
+                         body, timeout=180)
+                data = r["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
+                pcm = Path(str(path) + ".pcm")
+                pcm.write_bytes(base64.b64decode(data))
+                run(["ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", pcm,
+                     "-af", "silenceremove=start_periods=1:start_threshold=-50dB,areverse,"
+                            "silenceremove=start_periods=1:start_threshold=-50dB,areverse",
+                     "-b:a", "160k", path])
+                pcm.unlink(missing_ok=True)
+                GEMINI_TTS["used"] = True
+                return True
+            except urllib.error.HTTPError as e:
+                msg = e.read()[:200]
+                if e.code in (429, 500, 503):
+                    time.sleep(8 * (attempt + 1))
+                    continue
+                log(f"Gemini voice {model}: HTTP {e.code} {msg!r}")
+                break
+            except Exception as e:
+                log(f"Gemini voice {model}: {e}")
+                time.sleep(3)
+    if GEMINI_TTS.get("used"):  # never mix two different voices inside one video
+        log("Gemini voice failed mid-video, waiting and retrying once more")
+        time.sleep(90)
+        if GEMINI_TTS.get("retry_done"):
+            raise RuntimeError("Gemini voice stopped working in the middle of the video")
+        GEMINI_TTS["retry_done"] = True
+        return gemini_tts(text, path)
+    GEMINI_TTS["on"] = False
+    log("Gemini voice not available - using normal Google voice")
+    return False
+
+
 def tts(text, path, offline=False):
     if offline:
         sec = max(2.5, len(text) / 14)
         run(["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=f=180:r=24000", "-af", "volume=0.05",
              "-t", f"{sec:.2f}", path])
         return
+    if GEMINI_TTS["on"] and gemini_tts(text, path):
+        return
     key = os.environ["GOOGLE_TTS_KEY"]
-    rate = float(os.getenv("TTS_RATE") or 0.97)
+    rate = float(os.getenv("TTS_RATE") or 1.08)
     last = None
     for voice in list(TTS_VOICES):
         body = {"input": {"text": text},
@@ -689,6 +753,117 @@ def pick_music(total, work, seed):
     return out
 
 
+# ---------------------------------------------------------------- sound effects
+SYNTH = {
+    "wind": "anoisesrc=c=pink:a=0.6:r=44100,bandpass=f=550:w=500,tremolo=f=0.17:d=0.8,lowpass=f=1800,volume=1.6",
+    "rain": "anoisesrc=c=white:a=0.35:r=44100,highpass=f=900,lowpass=f=7000,volume=0.8",
+    "sea": "anoisesrc=c=brown:a=0.8:r=44100,lowpass=f=1100,tremolo=f=0.11:d=0.9,volume=1.4",
+    "fire": "aevalsrc='0.25*(random(0)-0.5)*lt(random(1),0.02)+0.04*(random(2)-0.5)':s=44100,highpass=f=300,lowpass=f=6000",
+    "heartbeat": "aevalsrc='0.9*sin(2*PI*48*t)*exp(-22*mod(t,0.95))+0.7*sin(2*PI*44*t)*exp(-22*mod(t-0.28,0.95))*gte(mod(t,0.95),0.28)':s=44100,lowpass=f=200",
+    "clock": "aevalsrc='0.5*sin(2*PI*2400*t)*exp(-400*mod(t,1))+0.35*sin(2*PI*1900*t)*exp(-400*mod(t-0.5,1))*gte(mod(t,1),0.5)':s=44100",
+    "train": "aevalsrc='0.6*sin(2*PI*70*t)*exp(-30*mod(t,0.62))+0.5*sin(2*PI*90*t)*exp(-30*mod(t-0.16,0.62))*gte(mod(t,0.62),0.16)+0.06*(random(0)-0.5)':s=44100,lowpass=f=900",
+    "drone": "aevalsrc='0.35*sin(2*PI*55*t)+0.25*sin(2*PI*82.4*t)*(0.6+0.4*sin(2*PI*0.07*t))+0.12*sin(2*PI*110.3*t)*(0.5+0.5*sin(2*PI*0.05*t+1))':s=44100,aecho=0.8:0.7:500:0.4",
+    "crowd": "anoisesrc=c=pink:a=0.5:r=44100,bandpass=f=700:w=900,tremolo=f=3.1:d=0.3,volume=0.9",
+    "forest": "anoisesrc=c=pink:a=0.3:r=44100,bandpass=f=400:w=300,volume=0.7",
+}
+SFX_MAP = [("train", "train"), ("locomotive", "train"), ("rail", "train"), ("snow", "wind"), ("wind", "wind"),
+           ("blizzard", "wind"), ("storm", "rain"), ("rain", "rain"), ("thunder", "rain"), ("sea", "sea"),
+           ("ocean", "sea"), ("wave", "sea"), ("ship", "sea"), ("river", "sea"), ("fire", "fire"),
+           ("burn", "fire"), ("candle", "fire"), ("heart", "heartbeat"), ("clock", "clock"), ("tick", "clock"),
+           ("crowd", "crowd"), ("people", "crowd"), ("market", "crowd"), ("forest", "forest"),
+           ("night", "forest"), ("drone", "drone"), ("dark", "drone"), ("tension", "drone")]
+SFX_CACHE = {}
+
+
+def freesound(query, out):
+    key = os.getenv("FREESOUND_API_KEY")
+    if not key:
+        return False
+    try:
+        url = ("https://freesound.org/apiv2/search/text/?page_size=8&fields=id,duration,previews,license&query="
+               + urllib.parse.quote(query) + "&filter=" + urllib.parse.quote('license:"Creative Commons 0" duration:[4 TO 90]')
+               + "&token=" + key)
+        for r in http(url, timeout=40).get("results", []):
+            prev = (r.get("previews") or {}).get("preview-hq-mp3")
+            if prev:
+                download(prev, out)
+                return True
+    except Exception as e:
+        log(f"Freesound failed '{query}': {e}")
+    return False
+
+
+def sfx_source(name, work):
+    """Returns a looping-capable audio file for this sound name (cached), or None."""
+    name = (name or "").strip().lower()
+    if not name or name == "none":
+        return None
+    if name in SFX_CACHE:
+        return SFX_CACHE[name]
+    out = None
+    p = work / f"fs_{slugify(name)}.mp3"
+    if freesound(name, p):
+        out = p
+    else:
+        kind = next((k for w, k in SFX_MAP if w in name), "drone")
+        p = work / f"syn_{kind}.wav"
+        if not p.exists():
+            run(["ffmpeg", "-y", "-f", "lavfi", "-i", SYNTH[kind], "-t", "20", "-ac", "2", "-ar", "44100", p])
+        out = p
+    SFX_CACHE[name] = out
+    return out
+
+
+def make_hit(path):
+    run(["ffmpeg", "-y", "-f", "lavfi", "-i",
+         "aevalsrc='0.9*sin(2*PI*42*t)*exp(-2.2*t)+0.5*sin(2*PI*31*t)*exp(-1.5*t)+0.25*(random(0)-0.5)*exp(-6*t)':s=44100:d=3.5",
+         "-af", "lowpass=f=400,aecho=0.8:0.8:90|170:0.4|0.3", "-ac", "2", path])
+
+
+def make_whoosh(path):
+    run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anoisesrc=c=pink:a=0.9:r=44100:d=1.2",
+         "-af", "bandpass=f=1400:w=1800,volume='sin(PI*t/1.2)^3':eval=frame,highpass=f=250", "-ac", "2", path])
+
+
+def build_sfx(scenes, durs, work):
+    """One background-sound track aligned with the narration: ambience per scene + hits + whooshes."""
+    hit, whoosh = work / "hit.wav", work / "whoosh.wav"
+    make_hit(hit)
+    make_whoosh(whoosh)
+    parts = []
+    for i, (sc, du) in enumerate(zip(scenes, durs)):
+        out = work / f"sfx_{i:03d}.wav"
+        src = sfx_source(sc.get("sfx"), work)
+        inputs, fc, mix = [], [], []
+        if src:
+            inputs += ["-stream_loop", "-1", "-i", src]
+            fc.append(f"[0:a]atrim=0:{du:.3f},asetpts=PTS-STARTPTS,aresample=44100,"
+                      f"loudnorm=I=-26:TP=-6,afade=t=in:d=0.6,afade=t=out:st={max(0, du - 0.6):.3f}:d=0.6[amb]")
+            mix.append("[amb]")
+        accents = []
+        if sc.get("hit") in (True, "true", "True", 1):
+            accents.append((hit, 0.9))
+        if i > 0 and scenes[i - 1]["chapter"] != sc["chapter"]:
+            accents.append((whoosh, 0.6))
+        for k, (a, vol) in enumerate(accents):
+            idx = len(inputs) // 2 if not src else 1 + k
+            inputs += ["-i", a]
+            fc.append(f"[{idx}:a]volume={vol}[x{k}]")
+            mix.append(f"[x{k}]")
+        if not mix:
+            run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{du:.3f}", out])
+        else:
+            graph = ";".join(fc) + ";" + "".join(mix) + (f"amix=inputs={len(mix)}:duration=longest:normalize=0,"
+                                                         f"apad,atrim=0:{du:.3f}[o]")
+            run(["ffmpeg", "-y", *inputs, "-filter_complex", graph, "-map", "[o]", "-ac", "2", "-ar", "44100", out])
+        parts.append(out)
+    (work / "sfx.txt").write_text("".join(f"file '{p.name}'\n" for p in parts))
+    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", work / "sfx.txt", "-c:a", "pcm_s16le", work / "sfx.wav"])
+    used = sorted({str(sc.get("sfx")) for sc in scenes if sc.get("sfx") and sc.get("sfx") != "none"})
+    log(f"Sound effects: {', '.join(used)[:300]}")
+    return work / "sfx.wav"
+
+
 def ass_time(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
@@ -737,7 +912,7 @@ def render_long(story, work, offline):
         raw = work / f"vo_{i:03d}.mp3"
         tts(sc["ur"], raw, offline)
         wav = work / f"vo_{i:03d}.wav"
-        pad = 0.55 if (i + 1 < len(scenes) and scenes[i + 1]["chapter"] != sc["chapter"]) else 0.3
+        pad = 0.7 if (i + 1 < len(scenes) and scenes[i + 1]["chapter"] != sc["chapter"]) else 0.12
         run(["ffmpeg", "-y", "-i", raw, "-af", f"apad=pad_dur={pad},aresample=44100", "-ac", "2", wav])
         auds.append(wav)
         durs.append(duration(wav))
@@ -770,6 +945,7 @@ def render_long(story, work, offline):
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", work / "clips.txt", "-c", "copy", work / "visual.mp4"])
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", work / "auds.txt", "-c:a", "pcm_s16le", work / "voice.wav"])
     music = pick_music(total, work, story["title"])
+    sfx = build_sfx(scenes, durs, work)
     dust = work / "dust.mp4"
     make_dust(dust)
 
@@ -779,11 +955,12 @@ def render_long(story, work, offline):
           f"[base][d]blend=c0_expr='min(255,A+0.4*B)':c1_expr='A':c2_expr='A',"
           f"vignette=PI/5,noise=alls=7:allf=t+u,fade=t=in:d=1,fade=t=out:st={max(0, total - 1.2):.2f}:d=1.2[v];"
           "[2:a]highpass=f=70,acompressor=threshold=-18dB:ratio=3:attack=5:release=150,"
-          "loudnorm=I=-15:TP=-1.5:LRA=9,aresample=44100,asplit=2[vo][sc];"
+          "loudnorm=I=-15:TP=-1.5:LRA=9,aresample=44100,asplit=3[vo][sc][sc2];"
           "[3:a]volume=0.8[mu];[mu][sc]sidechaincompress=threshold=0.06:ratio=3:attack=40:release=700[duck];"
-          "[vo][duck]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[a]")
+          "[4:a]volume=1.0[fx];[fx][sc2]sidechaincompress=threshold=0.08:ratio=2:attack=40:release=500[fxd];"
+          "[vo][duck][fxd]amix=inputs=3:duration=longest:normalize=0,alimiter=limit=0.95[a]")
     run(["ffmpeg", "-y", "-i", work / "visual.mp4", "-stream_loop", "-1", "-i", dust, "-i", work / "voice.wav",
-         "-i", music, "-filter_complex", fc, "-map", "[v]", "-map", "[a]",
+         "-i", music, "-i", sfx, "-filter_complex", fc, "-map", "[v]", "-map", "[a]",
          "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "192k", "-r", FPS, "-t", f"{total:.2f}", "-movflags", "+faststart", final])
     return final, credits, starts, durs, total
