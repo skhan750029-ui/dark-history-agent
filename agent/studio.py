@@ -506,11 +506,12 @@ def stock_video(query, used):
 
 
 SETTING = ""
+AI_OFF = {"off": False}
 
 
 def ai_image(prompt, path, seed):
     acc, tok = os.getenv("CF_ACCOUNT_ID"), os.getenv("CF_API_TOKEN")
-    if not (acc and tok):
+    if not (acc and tok) or AI_OFF["off"]:
         return False
     full = (prompt + (f". Setting: {SETTING}" if SETTING else "") + ", photorealistic cinematic film still, dramatic moody lighting, 35mm film, "
             "high detail, muted colors, 16:9 composition")[:2000]
@@ -518,7 +519,7 @@ def ai_image(prompt, path, seed):
         for attempt in range(3):
             try:
                 r = http(f"https://api.cloudflare.com/client/v4/accounts/{acc}/ai/run/{model}",
-                         {"prompt": full, "steps": 6},
+                         {"prompt": full, "steps": 4},
                          headers={"Authorization": f"Bearer {tok}"}, timeout=120)
                 img = r.get("result", {}).get("image")
                 if img:
@@ -526,7 +527,12 @@ def ai_image(prompt, path, seed):
                     Image.open(path).convert("RGB").save(path, quality=95)
                     return True
             except urllib.error.HTTPError as e:
-                log(f"AI image HTTP {e.code}: {e.read()[:200]!r}")
+                msg = e.read()[:200]
+                log(f"AI image HTTP {e.code}: {msg!r}")
+                if b"daily free allocation" in msg:
+                    AI_OFF["off"] = True
+                    log("Cloudflare daily free limit reached - no more AI pictures today")
+                    return False
                 if e.code == 429:
                     time.sleep(10 * (attempt + 1))
                     continue
