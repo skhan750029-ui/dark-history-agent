@@ -12,6 +12,8 @@ from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "data" / "voice_samples"
 OUT.mkdir(parents=True, exist_ok=True)
+for old in OUT.glob("*.mp3"):
+    old.unlink()
 KEY = os.getenv("GOOGLE_TTS_KEY", "")
 GKEY = os.getenv("GEMINI_API_KEY", "")
 LOG = []
@@ -105,16 +107,14 @@ def music_test():
 
 cloud("1_old_chirp_charon_slow", "ur-IN-Chirp3-HD-Charon", "ur-IN", rate=0.97)
 cloud("2_chirp_charon_faster", "ur-IN-Chirp3-HD-Charon", "ur-IN", rate=1.12)
-cloud("3_gemini_pro_urdu_charon", "Charon", "ur-PK", model="gemini-2.5-pro-tts", prompt=STYLE)
-cloud("4_gemini_flash_urdu_orus", "Orus", "ur-PK", model="gemini-2.5-flash-tts", prompt=STYLE)
-cloud("5_gemini_31_urdu_charon", "Charon", "ur-PK", model="gemini-3.1-flash-tts-preview", prompt=STYLE)
-cloud("6_gemini_pro_hindi_charon", "Charon", "hi-IN", model="gemini-2.5-pro-tts", prompt=STYLE)
-gemini_api("7_gemini_api_charon", "gemini-2.5-flash-preview-tts", "Charon")
+gemini_api("3_gemini_charon", "gemini-2.5-flash-preview-tts", "Charon")
+gemini_api("4_gemini_orus", "gemini-2.5-flash-preview-tts", "Orus")
+gemini_api("5_gemini_fenrir", "gemini-2.5-flash-preview-tts", "Fenrir")
+gemini_api("6_gemini_pro_charon", "gemini-2.5-pro-preview-tts", "Charon")
 
 track = music_test()
-best = next((OUT / f"{n}.mp3" for n in ["3_gemini_pro_urdu_charon", "5_gemini_31_urdu_charon",
-                                         "4_gemini_flash_urdu_orus", "2_chirp_charon_faster"]
-             if (OUT / f"{n}.mp3").exists()), None)
+best = next((OUT / f"{n}.mp3" for n in ["3_gemini_charon", "6_gemini_pro_charon", "4_gemini_orus",
+                                         "2_chirp_charon_faster"] if (OUT / f"{n}.mp3").exists()), None)
 if track and best:
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", best, "-stream_loop", "-1", "-i", track,
                     "-filter_complex",
