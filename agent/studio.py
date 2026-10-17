@@ -366,7 +366,7 @@ def tts(text, path, offline=False):
     if GEMINI_TTS["on"] and gemini_tts(text, path):
         return
     key = os.environ["GOOGLE_TTS_KEY"]
-    rate = float(os.getenv("TTS_RATE") or 1.08)
+    rate = float(os.getenv("TTS_RATE") or 1.15)
     last = None
     for voice in list(TTS_VOICES):
         body = {"input": {"text": text},
@@ -799,6 +799,48 @@ def freesound(query, out):
     return False
 
 
+SFX_CREDITS = []
+
+
+def commons_audio(query, out):
+    """Real recorded sound effect from Wikimedia Commons (free licence), converted to wav."""
+    q = urllib.parse.quote(f"{query} sound filetype:audio")
+    url = ("https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search"
+           f"&gsrsearch={q}&gsrnamespace=6&gsrlimit=10&prop=imageinfo&iiprop=url|size|extmetadata|mime")
+    try:
+        time.sleep(1.2)
+        pages = http(url, timeout=40).get("query", {}).get("pages", {})
+    except Exception as e:
+        log(f"Commons audio failed '{query}': {e}")
+        return False
+    for pg in sorted(pages.values(), key=lambda p: p.get("index", 99)):
+        ii = (pg.get("imageinfo") or [{}])[0]
+        meta = ii.get("extmetadata", {})
+        lic = meta.get("LicenseShortName", {}).get("value", "")
+        if not any(k in lic.lower() for k in OK_LICENSES) or "-nd" in lic.lower() or " nc" in lic.lower():
+            continue
+        if not ii.get("url") or not (20_000 < ii.get("size", 0) < 25_000_000):
+            continue
+        if "midi" in (ii.get("mime") or ""):
+            continue
+        title = pg.get("title", "").lower()
+        if re.search(r"xc\d{4,}", title) or not any(w in title for w in query.lower().split() if len(w) > 3):
+            continue  # skip bird-song recordings and unrelated files
+        try:
+            raw = out.with_suffix(".src")
+            download(ii["url"], raw)
+            run(["ffmpeg", "-y", "-i", raw, "-t", "60", "-ac", "2", "-ar", "44100", out])
+            raw.unlink(missing_ok=True)
+            if duration(out) < 2.5:
+                continue
+            artist = re.sub(r"<[^>]+>", "", meta.get("Artist", {}).get("value", ""))[:50].strip() or "Unknown"
+            SFX_CREDITS.append(f"Sound: {pg['title'].replace('File:', '')} - {artist} ({lic}), Wikimedia Commons")
+            return True
+        except Exception as e:
+            log(f"Commons audio skip {pg.get('title')}: {e}")
+    return False
+
+
 def sfx_source(name, work):
     """Returns a looping-capable audio file for this sound name (cached), or None."""
     name = (name or "").strip().lower()
@@ -808,8 +850,11 @@ def sfx_source(name, work):
         return SFX_CACHE[name]
     out = None
     p = work / f"fs_{slugify(name)}.mp3"
+    w = work / f"cm_{slugify(name)}.wav"
     if freesound(name, p):
         out = p
+    elif commons_audio(name, w) or commons_audio(" ".join(name.split()[-1:]), w):
+        out = w
     else:
         kind = next((k for w, k in SFX_MAP if w in name), "drone")
         p = work / f"syn_{kind}.wav"
@@ -1102,7 +1147,7 @@ def description(story, credits, extra=""):
     return (f"{story['description'].strip()}\n\n{extra}"
             f"Subscribe to {CHANNEL} for the stories history tried to forget.\n\n"
             f"Narration: Urdu. Some scenes are AI-generated illustrations of historical events.\n"
-            f"Footage & images:\n{cred}\n" + "".join(c + "\n" for c in MUSIC_CREDIT) + f"\n{tags}")
+            f"Footage & images:\n{cred}\n" + "".join(c + "\n" for c in MUSIC_CREDIT + SFX_CREDITS[:15]) + f"\n{tags}")
 
 
 # =============================================================== MAIN
