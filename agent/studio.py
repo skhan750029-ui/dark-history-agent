@@ -51,13 +51,15 @@ CHANNEL = os.getenv("CHANNEL_NAME", "Dark History")
 PRIVACY = (os.getenv("PRIVACY") or "public").strip().lower()
 LONG_MINUTES = float(os.getenv("LONG_MINUTES") or 11)
 SHORTS_COUNT = int(os.getenv("SHORTS_COUNT") or 2)
-TTS_VOICES = [v for v in [os.getenv("TTS_VOICE"), "ur-IN-Chirp3-HD-Charon", "ur-IN-Chirp3-HD-Orus",
-                          "ur-IN-Chirp3-HD-Fenrir", "ur-IN-Wavenet-B", "ur-IN-Standard-B"] if v]
+LANG = (os.getenv("NARRATION_LANG") or "en").strip().lower()   # "en" = English narration, "ur" = Urdu
+TTS_VOICES = [v for v in [os.getenv("TTS_VOICE")] + (
+    ["en-US-Chirp3-HD-Charon", "en-US-Chirp3-HD-Orus", "en-US-Chirp3-HD-Fenrir", "en-US-Studio-Q"] if LANG == "en" else
+    ["ur-IN-Chirp3-HD-Charon", "ur-IN-Chirp3-HD-Orus", "ur-IN-Chirp3-HD-Fenrir", "ur-IN-Wavenet-B"]) if v]
 W, H, FPS = 1920, 1080, 30
 
 FONT_LATIN = ["/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
               "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
-URDU_FONT_NAME = "Noto Naskh Arabic"
+URDU_FONT_NAME = "DejaVu Sans" if LANG == "en" else "Noto Naskh Arabic"
 
 
 def log(*a):
@@ -270,7 +272,11 @@ Plan a {minutes:.0f}-minute documentary with {n_ch} chapters. Return ONLY JSON:
         raise RuntimeError("repeated topic")
     log(f"Topic: {outline['topic']} | {outline['title']}")
 
-    words_per_ch = int(minutes * 135 / len(outline["chapters"]))
+    LANG_RULE = ("simple, clear spoken English like a gripping documentary narrator (short everyday "
+                 "words, easy for non-native listeners; no complicated vocabulary)." if LANG == "en" else
+                 "natural spoken Urdu (Urdu script, simple everyday Urdu like a popular storyteller; "
+                 "English words only for names/places/terms).")
+    words_per_ch = int(minutes * (150 if LANG == "en" else 135) / len(outline["chapters"]))
     scenes, previous = [], ""
     for i, ch in enumerate(outline["chapters"]):
         first = i == 0
@@ -280,13 +286,12 @@ YouTube documentary "{outline['title']}" (story: {outline['topic']}).
 Chapter: {ch['title']} - {ch['summary']}
 Story so far (last lines): {previous[-600:] or '(start of the video)'}
 
-Write about {words_per_ch} words of narration in natural spoken Urdu (Urdu script, simple
-everyday Urdu like a popular storyteller; English words only for names/places/terms).
+Write about {words_per_ch} words of narration in {LANG_RULE}
 Style: suspenseful, emotional, short sentences, questions to the viewer, cliffhanger at the end
-of the chapter. {'Start with a powerful 2-sentence hook, then a quick "is video mein..." promise.' if first else 'Continue smoothly, do not greet again.'}
+of the chapter. {'Start with a powerful 2-sentence hook, then a quick "In this video..." promise.' if first else 'Continue smoothly, do not greet again.'}
 {'End with a chilling final thought, then ask viewers to like, comment and subscribe to ' + CHANNEL + '.' if last else ''}
 Write it to be PERFORMED, not read: use "..." for dramatic pauses, "!" for shock, "?" for questions
-to the viewer, and words of emotion (achanak, khaufnak, yaqeen nahi aata...).
+to the viewer, and words of emotion (suddenly, chilling, unbelievable...).
 Split into scenes of 1-2 sentences (8-14 seconds each when spoken).
 {VISUAL_RULES}
 {SFX_RULES}
@@ -1146,7 +1151,7 @@ def description(story, credits, extra=""):
     cred = "\n".join(f"- {c}" for c in credits[:30])
     return (f"{story['description'].strip()}\n\n{extra}"
             f"Subscribe to {CHANNEL} for the stories history tried to forget.\n\n"
-            f"Narration: Urdu. Some scenes are AI-generated illustrations of historical events.\n"
+            f"Narration: {'English' if LANG == 'en' else 'Urdu'}. Some scenes are AI-generated illustrations of historical events.\n"
             f"Footage & images:\n{cred}\n" + "".join(c + "\n" for c in MUSIC_CREDIT + SFX_CREDITS[:15]) + f"\n{tags}")
 
 
