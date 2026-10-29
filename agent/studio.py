@@ -525,6 +525,75 @@ def is_used(topic, done):
                (len(key) >= 5 and (key in slugify(t) or slugify(t) in key)) for t in done)
 
 
+def text(v, default=""):
+    """AI fields sometimes come back as null, numbers or lists - always give back a clean string."""
+    if isinstance(v, list):
+        v = " ".join(str(x) for x in v if x)
+    v = "" if v is None else str(v).strip()
+    return v or default
+
+
+def normalize_outline(o, n_ch=5):
+    """Fills every field the rest of the pipeline reads, so a missing or oddly-shaped field in the AI
+    answer gets a sensible default instead of a KeyError."""
+    o["topic"] = text(o.get("topic")) or text(o.get("title")) or text(o.get("wikipedia"), "Dark History Story")
+    o["title"] = text(o.get("title"), o["topic"])[:100]
+    o["wikipedia"] = text(o.get("wikipedia"), o["topic"])
+    o["thumbnail_text"] = text(o.get("thumbnail_text")) or " ".join(o["title"].split()[:3])
+    o["setting"] = text(o.get("setting"))
+    o["thumbnail_prompt"] = text(o.get("thumbnail_prompt"), f"{o['title']}, {o['setting']}".strip(", "))
+    o["description"] = text(o.get("description"), f"The true story of {o['topic']}.")
+    for k, default in (("tags", [o["topic"], "dark history", "history", "mystery"]),
+                       ("hashtags", ["#history", "#mystery", "#darkhistory"])):
+        v = o.get(k)
+        v = [s.strip() for s in v.split(",")] if isinstance(v, str) else v
+        o[k] = [text(x) for x in v if text(x)] if isinstance(v, list) and v else default
+    o["hashtags"] = [h if h.startswith("#") else "#" + h.replace(" ", "") for h in o["hashtags"]]
+    chs = o.get("chapters")
+    if not isinstance(chs, list) or not chs:
+        chs = [{} for _ in range(n_ch)]
+    fixed = []
+    for i, ch in enumerate(chs):
+        ch = ch if isinstance(ch, dict) else {"title": text(ch)}
+        title = text(ch.get("title")) or text(ch.get("name"), f"Part {i + 1}")
+        summary = (text(ch.get("summary")) or text(ch.get("description")) or text(ch.get("content"))
+                   or f"Part {i + 1} of the story of {o['topic']}: {title}.")
+        fixed.append({**ch, "title": title, "summary": summary})
+    o["chapters"] = fixed
+    shorts = []
+    for sh in o.get("shorts") if isinstance(o.get("shorts"), list) else []:
+        sh = sh if isinstance(sh, dict) else {}
+        try:
+            c = min(max(int(sh.get("chapter", 0)), 0), len(fixed) - 1)
+        except (TypeError, ValueError):
+            c = 0
+        shorts.append({"chapter": c, "title": text(sh.get("title"), fixed[c]["title"])[:90]})
+    o["shorts"] = shorts or [{"chapter": c, "title": fixed[c]["title"]} for c in sorted({0, min(2, len(fixed) - 1)})]
+    return o
+
+
+def scene_list(ch):
+    """Scenes from one chapter of the AI answer, accepting the usual variations of field names."""
+    raw = ch.get("scenes") if isinstance(ch, dict) else ch
+    out = []
+    for sc in raw if isinstance(raw, list) else []:
+        if isinstance(sc, str):
+            sc = {"ur": sc}
+        if not isinstance(sc, dict):
+            continue
+        sc["ur"] = text(sc.get("ur")) or text(sc.get("narration")) or text(sc.get("text"))
+        if not sc["ur"]:
+            continue
+        sc["type"] = text(sc.get("type"), "video").lower()
+        for k in ("query", "query2", "film", "archive", "prompt", "sfx"):
+            sc[k] = text(sc.get(k))
+        sc["query"] = sc["query"] or sc["query2"] or "dark fog night"
+        sc["sfx"] = sc["sfx"] or "dark drone"
+        sc["hit"] = sc.get("hit") in (True, "true", "True", 1)
+        out.append(sc)
+    return out
+
+
 def write_story(minutes):
     """3-4 AI requests in total: 1 outline (picks a trending topic) + the narration 2 chapters at a time."""
     done = used_topics()
@@ -560,7 +629,8 @@ Plan a {minutes:.0f}-minute documentary with {n_ch} chapters. Return ONLY JSON:
   "hashtags": ["#history", "#mystery", "..."],
   "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells"}}],
   "shorts": [{{"chapter": 0, "title": "English Shorts title max 60 chars"}}, {{"chapter": 2, "title": "..."}}]
-}}""", keys=("topic", "title", "chapters"), max_tokens=3000)
+}}""", keys=("chapters",), max_tokens=3000)
+    outline = normalize_outline(outline, n_ch)
     if is_used(outline["topic"], done):
         raise RuntimeError(f"repeated topic: {outline['topic']}")
     log(f"Topic: {outline['topic']} | {outline['title']} | why: {outline.get('trend_reason', '')[:160]}")
@@ -573,8 +643,9 @@ Plan a {minutes:.0f}-minute documentary with {n_ch} chapters. Return ONLY JSON:
     chapters = outline["chapters"]
     words_per_ch = int(minutes * (150 if LANG == "en" else 135) / len(chapters))
     scenes, previous = [], ""
-    for b0 in range(0, len(chapters), 2):
-        batch = list(range(b0, min(b0 + 2, len(chapters))))
+
+    def write_part(batch):
+        """Narration for these chapters -> {chapter index: [scenes]} (missing chapters are simply absent)."""
         first, last = batch[0] == 0, batch[-1] == len(chapters) - 1
         plan = "\n".join(f"{n + 1}. {chapters[i]['title']} - {chapters[i]['summary']}"
                          for n, i in enumerate(batch))
@@ -598,17 +669,32 @@ Split each chapter into scenes of 1-2 sentences (8-14 seconds each when spoken).
 Return ONLY JSON with one entry per chapter, in order:
 {{"chapters": [{{"scenes": [{{"ur": "narration", "type": "video|archive|image", "query": "...", "query2": "...",
 "film": "", "archive": "...", "prompt": "...", "sfx": "...", "hit": false}}]}}]}}""",
-                        keys=("chapters",), max_tokens=min(6000, 1200 + int(len(batch) * words_per_ch * 4.5)))
-        got = part["chapters"]
-        if len(got) < len(batch):
-            raise RuntimeError(f"AI wrote {len(got)} of {len(batch)} chapters")
-        for i, ch in zip(batch, got):
-            for sc in ch.get("scenes", []):
-                if str(sc.get("ur", "")).strip():
-                    sc["chapter"] = i
-                    scenes.append(sc)
-            log(f"Chapter {i + 1}: {len(ch.get('scenes', []))} scenes")
+                        max_tokens=min(6000, 1200 + int(len(batch) * words_per_ch * 4.5)))
+        got = part.get("chapters")
+        if not isinstance(got, list):  # answer came back as one flat {"scenes": [...]}
+            got = [part] if len(batch) == 1 or "scenes" in part else []
+        return {i: s for i, ch in zip(batch, got) if (s := scene_list(ch))}
+
+    for b0 in range(0, len(chapters), 2):
+        batch = list(range(b0, min(b0 + 2, len(chapters))))
+        try:
+            got = write_part(batch)
+        except Exception as e:
+            log(f"Chapters {batch[0] + 1}-{batch[-1] + 1} failed ({e}), writing them one by one")
+            got = {}
+        for i in batch:
+            if i not in got:  # one extra request only for a chapter the AI skipped
+                try:
+                    got.update(write_part([i]))
+                except Exception as e:
+                    log(f"Chapter {i + 1} failed again: {e}")
+            for sc in got.get(i, []):
+                sc["chapter"] = i
+                scenes.append(sc)
+            log(f"Chapter {i + 1}: {len(got.get(i, []))} scenes")
         previous = " ".join(s["ur"] for s in scenes[-3:])
+    if len({s["chapter"] for s in scenes}) < max(2, len(chapters) - 1):
+        raise RuntimeError(f"Only {len({s['chapter'] for s in scenes})} of {len(chapters)} chapters written")
     outline["scenes"] = scenes
     log(f"Story written with {LLM_STATE['calls']} AI requests")
     return outline
@@ -1658,6 +1744,8 @@ def main():
                 log(f"Story attempt {attempt + 1} failed: {e}")
         if not story:
             raise RuntimeError("Could not write a story")
+    story = normalize_outline(story)
+    story["scenes"] = [dict(s, chapter=int(s.get("chapter") or 0)) for s in scene_list(story)]
 
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M")
     work = OUT / f"{stamp}-{slugify(story['topic'])}"
