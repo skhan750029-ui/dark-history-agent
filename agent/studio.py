@@ -4,18 +4,19 @@ Dark History studio (v2) - one run makes and uploads:
   * 1 long documentary (16:9, ~10-12 min, Urdu narration, English title)
   * 2 YouTube Shorts (9:16) cut from the strongest moments of that video
 
-Pipeline: researched story -> Urdu narration (Google Chirp HD voice) -> visuals
-(Pexels stock video, AI cinematic images via Cloudflare, archive photos) ->
-animated edit (camera moves, light flicker, dust, grain) -> music with ducking
--> thumbnail -> YouTube upload (Shorts scheduled later in the day).
+Pipeline: trending topic (YouTube + Wikipedia + anniversaries) -> story checked against Wikipedia
+(3-4 free AI requests) -> narration (Google Chirp HD voice, spoken in long passages) -> real video
+clips (Pexels, Pixabay, Wikimedia Commons film; archive photos only for named people/places) ->
+edit (dust, grain, vignette) -> music with ducking -> thumbnail -> YouTube upload (Shorts later).
 
-Secrets (GitHub -> Settings -> Secrets -> Actions):
-  GROQ_API_KEY or GEMINI_API_KEY   AI writer
-  GOOGLE_TTS_KEY                   Google Text-to-Speech API key (Urdu voice)
-  PEXELS_API_KEY / PIXABAY_API_KEY free stock videos (optional but recommended)
-  CF_ACCOUNT_ID + CF_API_TOKEN     Cloudflare Workers AI images (optional)
+Secrets (GitHub -> Settings -> Secrets -> Actions) - all free tiers:
+  GROQ_API_KEY                     AI writer (free). Fallbacks: GEMINI_API_KEY (free-tier project),
+                                   OPENROUTER_API_KEY (":free" models), CF_ACCOUNT_ID + CF_API_TOKEN
+  GOOGLE_TTS_KEY                   Google Text-to-Speech API key (voice)
+  PEXELS_API_KEY / PIXABAY_API_KEY free stock videos (needed for video clips)
+  YT_API_KEY                       YouTube Data API key for trending topics (optional)
   YT_CLIENT_ID / YT_CLIENT_SECRET / YT_REFRESH_TOKEN   YouTube upload
-Variables (optional): CHANNEL_NAME, PRIVACY, TTS_VOICE, LONG_MINUTES, SHORTS_COUNT
+Variables (optional): CHANNEL_NAME, PRIVACY, TTS_VOICE, TTS_RATE, LONG_MINUTES, SHORTS_COUNT
 
 Usage:
   python agent/studio.py                 # full run
@@ -24,6 +25,7 @@ Usage:
 import argparse
 import base64
 import datetime as dt
+import html
 import json
 import math
 import os
@@ -105,71 +107,209 @@ def slugify(s):
 
 # =============================================================== 1. STORY (AI writer)
 
-def groq(prompt, json_only=False, search=False, max_tokens=8000):
-    key = os.environ["GROQ_API_KEY"]
-    models = [m for m in [os.getenv("GROQ_MODEL"), "openai/gpt-oss-120b", "openai/gpt-oss-20b",
-                          "moonshotai/kimi-k2-instruct-0905", "llama-3.3-70b-versatile"] if m]
-    last = None
-    for model in models:
-        opts = [True, False] if (search and "gpt-oss" in model) else [False]
-        for use_search in opts:
-            body = {"model": model, "temperature": 0.8, "max_completion_tokens": max_tokens,
-                    "messages": [{"role": "user", "content": prompt}]}
-            if use_search:
-                body["tools"] = [{"type": "browser_search"}]
-            elif json_only:
-                body["response_format"] = {"type": "json_object"}
-            for attempt in range(4):
-                try:
-                    r = http("https://api.groq.com/openai/v1/chat/completions", body,
-                             headers={"Authorization": f"Bearer {key}"}, timeout=300)
-                    txt = r["choices"][0]["message"]["content"] or ""
-                    if txt.strip():
-                        log(f"AI writer ok ({model}, search={use_search})")
-                        return txt
-                    break
-                except urllib.error.HTTPError as e:
-                    last = e
-                    log(f"Groq {model} search={use_search}: {e}")
-                    if e.code == 429:
-                        time.sleep(20 * (attempt + 1))
-                        continue
-                    break
-                except Exception as e:
-                    last = e
-                    log(f"Groq {model}: {str(e)[:150]}")
-                    break
-    raise RuntimeError(f"AI writer failed: {last}")
+# Free AI writers only, tried in this order: Groq free tier -> Gemini free tier -> OpenRouter ":free"
+# models -> Cloudflare Workers AI (free daily allowance). Model names are read from each provider at run
+# time, so a retired model can never 404 the whole run again. A model that answers 403/404 is dropped,
+# a provider that answers 401/402 (bad key / billing) is switched off, and a 429 waits exactly as long as
+# the API asks before retrying (or moves on when that wait is longer than LLM_MAX_WAIT).
+
+MAX_WAIT = float(os.getenv("LLM_MAX_WAIT") or 90)
+LLM_STATE = {"dead": set(), "models": None, "budget": {}, "last": 0.0, "calls": 0, "ok": None}
+
+GROQ_PREFER = ["openai/gpt-oss-120b", "moonshotai/kimi-k2", "qwen/qwen3-32b", "llama-4-maverick",
+               "openai/gpt-oss-20b", "llama-4-scout", "llama-3.3-70b"]
+OPENROUTER_PREFER = ["deepseek/deepseek-chat", "deepseek/deepseek-v3", "openai/gpt-oss-120b",
+                     "meta-llama/llama-3.3-70b", "qwen/qwen3-235b", "moonshotai/kimi-k2", "google/gemma-3-27b",
+                     "mistralai/mistral-small"]
+CF_MODELS = ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", "@cf/meta/llama-4-scout-17b-16e-instruct",
+             "@cf/mistralai/mistral-small-3.1-24b-instruct"]
+SKIP_MODEL = re.compile(r"whisper|tts|guard|safeguard|compound|embed|vision|image|audio|live|orpheus|playai|"
+                        r"allam|instant|\b[1-9]b\b|-[1-9]b|nano|robotics|computer-use", re.I)
 
 
-def gemini(prompt, search=False):
-    key = os.environ["GEMINI_API_KEY"]
-    for model in [m for m in [os.getenv("GEMINI_MODEL"), "gemini-2.5-flash", "gemini-flash-latest"] if m]:
-        body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.8}}
-        if search:
-            body["tools"] = [{"google_search": {}}]
-        try:
-            r = http(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
-                     body, timeout=300)
-            txt = "".join(p.get("text", "") for p in r["candidates"][0]["content"]["parts"])
-            if txt.strip():
-                return txt
-        except Exception as e:
-            log(f"Gemini {model}: {str(e)[:150]}")
-    raise RuntimeError("Gemini failed")
+def parse_secs(v):
+    """'20', '7.66s', '2m59.5s', '1h2m3s', '350ms' -> seconds (None if unreadable)."""
+    v = str(v or "").strip()
+    try:
+        return float(v)
+    except ValueError:
+        pass
+    if re.fullmatch(r"[\d.]+ms", v):
+        return float(v[:-2]) / 1000
+    parts = re.findall(r"([\d.]+)(h|m|s)", v)
+    return sum(float(n) * {"h": 3600, "m": 60, "s": 1}[u] for n, u in parts) if parts else None
 
 
-def llm(prompt, search=False, json_only=False):
+def retry_after(e, body):
+    """How long a 429 answer asks us to wait (Retry-After, Groq reset headers, Gemini retryDelay)."""
+    hdr = e.headers or {}
+    for k in ("retry-after", "x-ratelimit-reset-tokens", "x-ratelimit-reset-requests"):
+        s = parse_secs(hdr.get(k))
+        if s is not None:
+            return s
+    m = re.search(rb'"retryDelay":\s*"([\d.]+)s"', body) or re.search(rb"try again in ([\dhms.]+)", body)
+    return parse_secs(m.group(1).decode()) if m else None
+
+
+def rank(ids, prefer):
+    score = lambda m: next((i for i, p in enumerate(prefer) if p in m), len(prefer))
+    return sorted((m for m in ids if not SKIP_MODEL.search(m)), key=score)
+
+
+def provider_models():
+    """[(provider, model)] in the order we try them, looked up once per run."""
+    if LLM_STATE["models"] is not None:
+        return LLM_STATE["models"]
+    out = []
     if os.getenv("GROQ_API_KEY"):
         try:
-            return groq(prompt, json_only=json_only, search=search)
+            data = http("https://api.groq.com/openai/v1/models", timeout=30,
+                        headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"})["data"]
+            ids = [m["id"] for m in data if m.get("active", True)]
         except Exception as e:
-            if not os.getenv("GEMINI_API_KEY"):
-                raise
-            log(f"Groq failed, trying Gemini: {e}")
+            log(f"Groq model list failed ({e}) - using defaults")
+            ids = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+        ids = rank(ids, GROQ_PREFER)[:5]
+        if os.getenv("GROQ_MODEL"):
+            ids = [os.getenv("GROQ_MODEL")] + [m for m in ids if m != os.getenv("GROQ_MODEL")]
+        out += [("groq", m) for m in ids]
     if os.getenv("GEMINI_API_KEY"):
-        return gemini(prompt, search=search)
-    raise RuntimeError("Add GROQ_API_KEY or GEMINI_API_KEY in GitHub secrets")
+        try:
+            data = http("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key="
+                        + os.environ["GEMINI_API_KEY"], timeout=30).get("models", [])
+            ids = [m["name"] for m in data if "generateContent" in m.get("supportedGenerationMethods", [])
+                   and "flash" in m["name"] and not SKIP_MODEL.search(m["name"])]
+
+            def ver(n):
+                v = re.search(r"gemini-(\d+(?:\.\d+)?)", n)
+                return (-float(v.group(1)) if v else 0, "lite" in n, "preview" in n or "exp" in n)
+            ids = sorted(ids, key=ver)[:4]
+        except urllib.error.HTTPError as e:
+            log(f"Gemini key not usable (HTTP {e.code}) - skipping Gemini")
+            ids = []
+        except Exception as e:
+            log(f"Gemini model list failed: {e}")
+            ids = []
+        out += [("gemini", m) for m in ids]
+    if os.getenv("OPENROUTER_API_KEY"):
+        try:
+            data = http("https://openrouter.ai/api/v1/models", timeout=30)["data"]
+            free = [m["id"] for m in data if m["id"].endswith(":free")
+                    and str(m.get("pricing", {}).get("prompt")) in ("0", "0.0")
+                    and str(m.get("pricing", {}).get("completion")) in ("0", "0.0")]
+            out += [("openrouter", m) for m in rank(free, OPENROUTER_PREFER)[:4]]
+        except Exception as e:
+            log(f"OpenRouter model list failed: {e}")
+    if os.getenv("CF_ACCOUNT_ID") and os.getenv("CF_API_TOKEN"):
+        out += [("cloudflare", m) for m in CF_MODELS]
+    log("AI writers: " + ", ".join(f"{p}:{m.split('/')[-1]}" for p, m in out))
+    LLM_STATE["models"] = out
+    return out
+
+
+def chat_call(provider, model, prompt, max_tokens, json_mode):
+    msgs = [{"role": "user", "content": prompt}]
+    if provider == "groq":
+        body = {"model": model, "temperature": 0.8, "max_completion_tokens": max_tokens, "messages": msgs}
+        if "gpt-oss" in model:
+            body["reasoning_effort"] = "low"  # thinking tokens count against the free per-minute budget
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
+        raw, hdr = http("https://api.groq.com/openai/v1/chat/completions", body, raw=True, timeout=300,
+                        headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"})
+        rem = hdr.get("x-ratelimit-remaining-tokens")
+        if rem and rem.isdigit():
+            reset = parse_secs(hdr.get("x-ratelimit-reset-tokens")) or 0
+            LLM_STATE["budget"][model] = (int(rem), time.time() + reset)
+        return json.loads(raw)["choices"][0]["message"]["content"] or ""
+    if provider == "gemini":
+        body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.8}}
+        if json_mode:
+            body["generationConfig"]["responseMimeType"] = "application/json"
+        r = http(f"https://generativelanguage.googleapis.com/v1beta/{model}:generateContent?key="
+                 + os.environ["GEMINI_API_KEY"], body, timeout=300)
+        return "".join(p.get("text", "") for p in r["candidates"][0]["content"]["parts"])
+    if provider == "openrouter":
+        body = {"model": model, "temperature": 0.8, "max_tokens": max_tokens, "messages": msgs}
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
+        r = http("https://openrouter.ai/api/v1/chat/completions", body, timeout=300,
+                 headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}", "X-Title": CHANNEL})
+        return r["choices"][0]["message"]["content"] or ""
+    r = http(f"https://api.cloudflare.com/client/v4/accounts/{os.environ['CF_ACCOUNT_ID']}/ai/run/{model}",
+             {"messages": msgs, "max_tokens": max_tokens, "temperature": 0.8}, timeout=300,
+             headers={"Authorization": f"Bearer {os.environ['CF_API_TOKEN']}"})
+    out = r.get("result", {}).get("response")
+    return json.dumps(out) if isinstance(out, (dict, list)) else (out or "")
+
+
+def pace(model, prompt, max_tokens):
+    """Space requests out and wait for Groq's per-minute token budget before sending, not after a 429."""
+    gap = time.time() - LLM_STATE["last"]
+    if gap < 3:
+        time.sleep(3 - gap)
+    rem, reset_at = LLM_STATE["budget"].get(model, (None, 0))
+    if rem is not None and rem < len(prompt) / 3.5 + max_tokens and reset_at > time.time():
+        w = min(MAX_WAIT, reset_at - time.time() + 1)
+        log(f"Waiting {w:.0f}s for {model} token budget")
+        time.sleep(w)
+
+
+def llm(prompt, json_mode=True, max_tokens=4000):
+    tried = []
+    for provider, model in provider_models():
+        if provider in LLM_STATE["dead"] or model in LLM_STATE["dead"]:
+            continue
+        jm = json_mode
+        for attempt in range(4):
+            pace(model, prompt, max_tokens)
+            try:
+                txt = chat_call(provider, model, prompt, max_tokens, jm)
+                LLM_STATE["last"] = time.time()
+                LLM_STATE["calls"] += 1
+                if txt.strip():
+                    if LLM_STATE["ok"] != model:
+                        log(f"AI writer ok: {provider} {model}")
+                    LLM_STATE["ok"] = model
+                    return txt
+                log(f"{provider} {model}: empty answer")
+                break
+            except urllib.error.HTTPError as e:
+                LLM_STATE["last"] = time.time()
+                body = e.read()[:800]
+                tried.append(f"{model.split('/')[-1]}:{e.code}")
+                if e.code == 429:
+                    wait = retry_after(e, body)
+                    if wait is None:
+                        wait = 15 * (attempt + 1)
+                    if wait <= MAX_WAIT and attempt < 3:
+                        log(f"{provider} {model}: 429 rate limit, waiting {wait:.0f}s then retrying")
+                        time.sleep(wait + 1)
+                        continue
+                    log(f"{provider} {model}: rate limit needs {wait:.0f}s - trying the next free model")
+                    break
+                if e.code in (400, 422) and jm:  # some free models don't support JSON mode
+                    jm = False
+                    continue
+                if e.code in (401, 402):
+                    LLM_STATE["dead"].add(provider)
+                    log(f"{provider}: HTTP {e.code} {body[:180]!r} - switched off for this run")
+                    break
+                if e.code >= 500 and attempt < 2:
+                    time.sleep(5 * (attempt + 1))
+                    continue
+                if e.code in (403, 404):
+                    LLM_STATE["dead"].add(model)
+                log(f"{provider} {model}: HTTP {e.code} {body[:180]!r}")
+                break
+            except Exception as e:
+                LLM_STATE["last"] = time.time()
+                tried.append(f"{model.split('/')[-1]}:err")
+                log(f"{provider} {model}: {str(e)[:150]}")
+                break
+    if not provider_models():
+        raise RuntimeError("Add GROQ_API_KEY (free) in GitHub secrets")
+    raise RuntimeError(f"All free AI writers failed: {', '.join(tried[-10:])}")
 
 
 def extract_json(txt):
@@ -182,24 +322,156 @@ def extract_json(txt):
         return json.loads(s2)
 
 
-def ask_json(prompt, search=False, keys=()):
-    for attempt in range(3):
-        raw = llm(prompt, search=search)
+def ask_json(prompt, keys=(), max_tokens=4000):
+    for attempt in range(2):
+        raw = llm(prompt, json_mode=True, max_tokens=max_tokens)
         try:
             obj = extract_json(raw)
         except Exception as e:
-            log(f"JSON broken ({e}), repairing")
-            fix = ("Return the following content as ONE strictly valid JSON object. Keep every value and "
-                   "all wording exactly. Output only JSON.\n\n" + raw)
-            try:
-                obj = extract_json(llm(fix, json_only=True))
-            except Exception as e2:
-                log(f"Repair failed: {e2}")
-                continue
+            log(f"JSON broken ({e}), asking once more")
+            continue
         if all(k in obj for k in keys):
             return obj
         log(f"JSON missing keys {keys}, retry {attempt + 1}")
     raise RuntimeError("AI writer did not return usable JSON")
+
+
+# ---------------------------------------------------------------- trending topics (free public data)
+
+DARK = re.compile(r"disaster|massacre|murder|killing|killer|myster|disappear|vanish|curse|ghost|haunt|shipwreck|"
+                  r"sinking|sank|wreck|explosion|plague|epidemic|famine|execut|assassinat|expedition|cannibal|"
+                  r"cult\b|tragedy|catastroph|collapse|poison|witch|hoax|unsolved|unexplained|kidnap|siege|mutiny|"
+                  r"abandoned|experiment|crash|flood|eruption|stampede|genocide|atrocit|lost |prison|asylum|"
+                  r"tomb|mummy|pirate|serial|hanged|burned|buried|torture|inquisition", re.I)
+NOT_STORY = re.compile(r"footballer|cricketer|singer|rapper|actor|actress|\bfilm\b|television|tv series|season|"
+                       r"album|song|video game|election|politician|company|tournament|league|\bcup\b|\bband\b|"
+                       r"wrestler|youtuber|player|musician|episode|novel|comic|franchise|streamer", re.I)
+OLD = re.compile(r"\b(1[0-9]{3}|200[0-5])\b|\bBC\b|century|ancient|medieval|historic", re.I)
+
+
+def yt_trending(limit=15):
+    """Dark-history videos with the most views in the last 3 weeks = topics already working in the niche."""
+    key = os.getenv("YT_API_KEY") or os.getenv("GOOGLE_TTS_KEY")
+    if not key:
+        return []
+    after = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=21)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    found = {}
+    for q in ["dark history", "history mystery documentary", "disturbing history"]:
+        url = "https://www.googleapis.com/youtube/v3/search?" + urllib.parse.urlencode({
+            "part": "snippet", "type": "video", "order": "viewCount", "publishedAfter": after, "q": q,
+            "maxResults": 15, "relevanceLanguage": "en", "key": key})
+        try:
+            for it in http(url, timeout=30).get("items", []):
+                found.setdefault(it["id"]["videoId"], html.unescape(it["snippet"]["title"]))
+        except urllib.error.HTTPError as e:
+            log(f"YouTube trend search off (HTTP {e.code}) - add a YT_API_KEY secret with YouTube Data API enabled")
+            break
+        except Exception as e:
+            log(f"YouTube trend search failed: {e}")
+            break
+    if not found:
+        return []
+    views = {}
+    try:
+        url = "https://www.googleapis.com/youtube/v3/videos?" + urllib.parse.urlencode(
+            {"part": "statistics", "id": ",".join(list(found)[:50]), "key": key})
+        views = {v["id"]: int(v["statistics"].get("viewCount", 0)) for v in http(url, timeout=30).get("items", [])}
+    except Exception as e:
+        log(f"YouTube view counts failed: {e}")
+    rows = sorted(found.items(), key=lambda kv: -views.get(kv[0], 0))
+    return [(t, views.get(v, 0)) for v, t in rows[:limit]]
+
+
+def wiki_trending(limit=12):
+    """History articles people are reading most on Wikipedia in the last 2 days."""
+    views = {}
+    for back in (1, 2):
+        d = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=back)
+        try:
+            arts = http(f"https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/all-access/"
+                        f"{d:%Y/%m/%d}", timeout=30)["items"][0]["articles"]
+        except Exception as e:
+            log(f"Wikipedia top views {d:%Y-%m-%d} failed: {e}")
+            continue
+        for a in arts[:500]:
+            t = a["article"].replace("_", " ")
+            if ":" not in t and t != "Main Page":
+                views[t] = views.get(t, 0) + a["views"]
+    desc, names = {}, list(views)
+    for k in range(0, len(names), 50):
+        q = urllib.parse.urlencode({"action": "query", "format": "json", "prop": "description",
+                                    "titles": "|".join(names[k:k + 50])})
+        try:
+            time.sleep(0.3)
+            for p in http("https://en.wikipedia.org/w/api.php?" + q, timeout=30)["query"]["pages"].values():
+                desc[p["title"]] = p.get("description", "")
+        except Exception as e:
+            log(f"Wikipedia descriptions failed: {e}")
+    hits = [(t, desc.get(t, ""), v) for t, v in views.items()
+            if DARK.search(f"{t} {desc.get(t, '')}") and not NOT_STORY.search(desc.get(t, ""))
+            and OLD.search(f"{t} {desc.get(t, '')}")]
+    return sorted(hits, key=lambda h: -h[2])[:limit]
+
+
+def on_this_day(days=4, limit=10):
+    """Dark events whose anniversary falls in the next few days (people search them on the date)."""
+    out = []
+    for k in range(days):
+        d = dt.date.today() + dt.timedelta(days=k)
+        try:
+            evs = http(f"https://en.wikipedia.org/api/rest_v1/feed/onthisday/events/{d:%m}/{d:%d}",
+                       timeout=30).get("events", [])
+        except Exception as e:
+            log(f"On-this-day {d} failed: {e}")
+            continue
+        for ev in evs:
+            if ev.get("year", 3000) > 1995 or not DARK.search(ev.get("text", "")):
+                continue
+            pages = ev.get("pages") or [{}]
+            pg = next((p for p in pages if DARK.search(p.get("description", "") + p.get("title", ""))), pages[0])
+            title = (pg.get("normalizedtitle") or pg.get("title", "")).replace("_", " ")
+            out.append((title, f"{d:%d %b} {ev['year']}: {ev['text']}"))
+    return out[:limit]
+
+
+def trend_signals():
+    yt, wk, od = yt_trending(), wiki_trending(), on_this_day()
+    log(f"Trend signals: {len(yt)} YouTube, {len(wk)} Wikipedia, {len(od)} anniversaries")
+    lines = []
+    if yt:
+        lines.append("Dark-history videos with the most views on YouTube in the last 3 weeks (proven demand - "
+                     "never copy them, pick the same KIND of story or a fresh one they did not cover):")
+        lines += [f"- {t} ({v:,} views)" for t, v in yt]
+    if wk:
+        lines.append("Real history articles people are reading most on Wikipedia right now:")
+        lines += [f"- {t} - {d} ({v:,} views in 2 days)" for t, d, v in wk]
+    if od:
+        lines.append("Dark anniversaries in the next days (a video on the anniversary gets extra search traffic):")
+        lines += [f"- {t} - {d}" for t, d in od]
+    return "\n".join(lines)
+
+
+def wiki_extract(title, chars=4500):
+    """Plain-text Wikipedia article for the chosen story - the facts the narration must follow."""
+    if not title:
+        return ""
+    try:
+        q = urllib.parse.urlencode({"action": "query", "format": "json", "list": "search", "srsearch": title,
+                                    "srlimit": 1})
+        hits = http("https://en.wikipedia.org/w/api.php?" + q, timeout=30)["query"]["search"]
+        if not hits:
+            return ""
+        q = urllib.parse.urlencode({"action": "query", "format": "json", "prop": "extracts", "explaintext": 1,
+                                    "redirects": 1, "titles": hits[0]["title"]})
+        txt = next(iter(http("https://en.wikipedia.org/w/api.php?" + q, timeout=30)["query"]["pages"].values()
+                        )).get("extract", "")
+    except Exception as e:
+        log(f"Wikipedia facts failed: {e}")
+        return ""
+    cut = re.search(r"\n==\s*(See also|References|Notes|Further reading|External links|In popular culture)\s*==", txt)
+    txt = re.sub(r"\n{2,}", "\n", txt[:cut.start()] if cut else txt)
+    log(f"Facts source: Wikipedia '{hits[0]['title']}' ({len(txt)} chars)")
+    return txt[:chars]
 
 
 def used_topics():
@@ -207,21 +479,27 @@ def used_topics():
     return [l.strip() for l in f.read_text(encoding="utf-8").splitlines() if l.strip()] if f.exists() else []
 
 
-VISUAL_RULES = """The picture on screen MUST show exactly what the narration of that scene says,
-in the correct era and place of the story. For every scene choose the visual:
-- "type": "image" (a cinematic AI picture of the exact moment: people in period clothes,
-  ships, rooms, letters, events - write it like a film still) - use this for about 75% of scenes,
+VISUAL_RULES = """The picture on screen MUST show what the narration of that scene says, in the era and
+place of the story. This is a VIDEO documentary: almost every scene is a real moving video clip.
+For every scene choose the visual:
+- "type": "video" (real footage) - about 80% of scenes. Think like a documentary editor using stock
+  footage: atmosphere, details and re-enactment shots that fit the era - stormy sea, old sailing ship,
+  fog over water, snow forest, candle flame, old letter, hands writing with a quill, old book pages,
+  lantern in the dark, rain on a window, burning fire, empty dark corridor, old map, ruins, cemetery,
+  clock ticking, silhouette walking in fog, horse carriage, steam train, medieval castle.
+  NEVER modern things (cities, cars, phones, offices, neon, concerts, modern people's faces).
   "archive" (a real historical photo/painting/map of a named person, place or object) - about 15%,
-  "video" (real stock footage) - ONLY about 10%, and ONLY for timeless nature/atmosphere that fits
-  the era (stormy sea, waves, fog, rain, fire, candle, desert, forest at night, clouds).
-  NEVER video of modern things (cities, lights, cars, concerts, phones, offices, modern people).
-  Never two "archive" in a row.
-- "prompt": ALWAYS write it, for every scene (also video/archive scenes, as a backup):
-  English prompt for the AI picture showing this scene's exact content: subject, era/year, place,
-  action, clothing, lighting, camera angle. Photorealistic cinematic film still, moody low-key
-  lighting, 35mm. No text, no logos, no gore, no real celebrities' faces in close-up.
-- "query": 2-4 simple English words for stock-footage search (e.g. "stormy ocean night").
-- "archive": 2-5 English words to search Wikimedia Commons (names, places, years)."""
+  only when the narration names a real person, ship, building or document. Never two "archive" in a row.
+  "image" (AI picture) - at most 5%, only when nothing filmable fits.
+- "query": 2-4 simple English words for stock-footage search of a clip that exists on Pexels/Pixabay
+  (e.g. "stormy ocean night", "candle flame dark", "old ship sailing").
+- "query2": a second, more general 2-3 word search in case the first finds nothing (e.g. "dark ocean").
+- "film": ONLY if real film footage of this exact event/era exists (after 1895: newsreels, war,
+  disasters, ships) 2-4 English words to search Wikimedia Commons videos, e.g. "Titanic 1912 film",
+  else "".
+- "archive": 2-5 English words to search Wikimedia Commons photos (names, places, years).
+- "prompt": English prompt for an AI picture of the scene (backup only): subject, era, place, lighting.
+  Photorealistic cinematic film still, moody, 35mm. No text, no gore, no real faces in close-up."""
 
 SFX_RULES = """Sound design for every scene (like a real documentary editor):
 - "sfx": the real background sound of what is on screen, 1-3 simple English words, e.g.
@@ -241,154 +519,181 @@ def looks_modern(tags):
     return bool(words & MODERN)
 
 
+def is_used(topic, done):
+    key = slugify(re.sub(r"\b(the|disappearance|mystery|tragedy|disaster)\b", "", topic.lower()))
+    return any(t.strip().lower() == topic.strip().lower() or
+               (len(key) >= 5 and (key in slugify(t) or slugify(t) in key)) for t in done)
+
+
 def write_story(minutes):
+    """3-4 AI requests in total: 1 outline (picks a trending topic) + the narration 2 chapters at a time."""
     done = used_topics()
     avoid = "\n".join(f"- {t}" for t in done[-300:]) or "- (none yet)"
     n_ch = max(4, round(minutes / 2.3))
+    trends = trend_signals() or "(no trend data today - pick a story with strong search interest)"
     outline = ask_json(f"""You are the head writer of "{CHANNEL}", a faceless YouTube channel that tells
-true, little-known, dark and mysterious stories from real history - in the style of the best
-Hindi/Urdu storytelling documentaries (gripping narrator, suspense, cliffhangers, a final twist).
+true, little-known, dark and mysterious stories from real history (gripping narrator, suspense,
+cliffhangers, a final twist). Today is {dt.date.today():%d %B %Y}.
 
-Pick ONE real, specific, verifiable dark or mysterious historical story (curses, disappearances,
-disasters, cover-ups, strange deaths, forgotten tragedies, bizarre experiments, lost places).
+TRENDING SIGNALS (free public data collected today):
+{trends}
+
+Pick ONE real, specific, verifiable dark or mysterious historical story that is most likely to get
+views NOW: best is a story from the Wikipedia or anniversary lists above, or a story of the same kind
+as the YouTube videos that are getting views. Curses, disappearances, disasters, cover-ups, strange
+deaths, forgotten tragedies, bizarre experiments, lost places.
 It must NOT be any of these already-used topics:
 {avoid}
-Use web search to verify names, dates, numbers. Never invent facts; mark legends as legends.
-Respect victims: no gore for shock, no glorifying violence.
+Never invent facts; mark legends as legends. Respect victims: no gore for shock, no glorifying violence.
+Skip stories about living people and stories tied to wars or political conflicts that are still going on.
 
 Plan a {minutes:.0f}-minute documentary with {n_ch} chapters. Return ONLY JSON:
 {{"topic": "short English name of the story",
+  "wikipedia": "exact title of the English Wikipedia article about this story",
+  "trend_reason": "which trending signal this matches and why it will get views",
   "title": "English YouTube title, max 70 chars, curiosity + truthful, may use one CAPS word",
   "thumbnail_text": "2-4 English words, punchy",
-  "setting": "visual setting for all pictures: year/era, place, period details (e.g. 1909, steamship era, stormy Indian Ocean off South Africa, Edwardian clothing)",
+  "setting": "visual setting for all pictures: year/era, place, period details",
   "thumbnail_prompt": "English prompt for a dramatic photorealistic cinematic thumbnail image of the story's key moment, no text",
   "description": "English description: 2 short hook paragraphs + 'Sources:' with 2-4 real sources",
   "tags": ["12-15 English SEO tags"],
   "hashtags": ["#history", "#mystery", "..."],
-  "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the verified facts this chapter tells"}}],
+  "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells"}}],
   "shorts": [{{"chapter": 0, "title": "English Shorts title max 60 chars"}}, {{"chapter": 2, "title": "..."}}]
-}}""", search=True, keys=("topic", "title", "chapters"))
-    if outline["topic"].strip().lower() in (t.lower() for t in done):
-        raise RuntimeError("repeated topic")
-    log(f"Topic: {outline['topic']} | {outline['title']}")
+}}""", keys=("topic", "title", "chapters"), max_tokens=3000)
+    if is_used(outline["topic"], done):
+        raise RuntimeError(f"repeated topic: {outline['topic']}")
+    log(f"Topic: {outline['topic']} | {outline['title']} | why: {outline.get('trend_reason', '')[:160]}")
+    facts = wiki_extract(outline.get("wikipedia") or outline["topic"])
 
     LANG_RULE = ("simple, clear spoken English like a gripping documentary narrator (short everyday "
                  "words, easy for non-native listeners; no complicated vocabulary)." if LANG == "en" else
                  "natural spoken Urdu (Urdu script, simple everyday Urdu like a popular storyteller; "
                  "English words only for names/places/terms).")
-    words_per_ch = int(minutes * (150 if LANG == "en" else 135) / len(outline["chapters"]))
+    chapters = outline["chapters"]
+    words_per_ch = int(minutes * (150 if LANG == "en" else 135) / len(chapters))
     scenes, previous = [], ""
-    for i, ch in enumerate(outline["chapters"]):
-        first = i == 0
-        last = i == len(outline["chapters"]) - 1
-        part = ask_json(f"""You write the Urdu narration for chapter {i + 1} of {len(outline['chapters'])} of a
+    for b0 in range(0, len(chapters), 2):
+        batch = list(range(b0, min(b0 + 2, len(chapters))))
+        first, last = batch[0] == 0, batch[-1] == len(chapters) - 1
+        plan = "\n".join(f"{n + 1}. {chapters[i]['title']} - {chapters[i]['summary']}"
+                         for n, i in enumerate(batch))
+        part = ask_json(f"""You write the narration of chapters {batch[0] + 1}-{batch[-1] + 1} of {len(chapters)} of the
 YouTube documentary "{outline['title']}" (story: {outline['topic']}).
-Chapter: {ch['title']} - {ch['summary']}
-Story so far (last lines): {previous[-600:] or '(start of the video)'}
+Chapters to write now:
+{plan}
+Story so far (last lines): {previous[-500:] or '(start of the video)'}
+FACTS (Wikipedia - follow these; if the chapter plan disagrees with them, the facts win):
+{facts or '(none - only use facts you are sure of)'}
 
-Write about {words_per_ch} words of narration in {LANG_RULE}
-Style: suspenseful, emotional, short sentences, questions to the viewer, cliffhanger at the end
-of the chapter. {'Start with a powerful 2-sentence hook, then a quick "In this video..." promise.' if first else 'Continue smoothly, do not greet again.'}
-{'End with a chilling final thought, then ask viewers to like, comment and subscribe to ' + CHANNEL + '.' if last else ''}
-Write it to be PERFORMED, not read: use "..." for dramatic pauses, "!" for shock, "?" for questions
-to the viewer, and words of emotion (suddenly, chilling, unbelievable...).
-Split into scenes of 1-2 sentences (8-14 seconds each when spoken).
+For EACH chapter write about {words_per_ch} words of narration in {LANG_RULE}
+Write it the way a great narrator TALKS, not like an essay: varied sentence length, contractions
+(it's, didn't), natural connectors (but, and then, so), a few direct questions to the viewer,
+"..." only for real dramatic pauses (max one per scene), "!" rarely. No headings, no lists.
+End each chapter on a small cliffhanger. {'Chapter 1 starts with a powerful 2-sentence hook, then a quick "In this video..." promise.' if first else 'Continue smoothly, do not greet again.'}
+{'The last chapter ends with a chilling final thought, then asks viewers to like, comment and subscribe to ' + CHANNEL + '.' if last else ''}
+Split each chapter into scenes of 1-2 sentences (8-14 seconds each when spoken).
 {VISUAL_RULES}
 {SFX_RULES}
-Return ONLY JSON: {{"scenes": [{{"ur": "Urdu narration", "type": "video|image|archive",
-"query": "...", "prompt": "...", "archive": "...", "sfx": "...", "hit": false}}]}}""", keys=("scenes",))
-        for sc in part["scenes"]:
-            if sc.get("ur", "").strip():
-                sc["chapter"] = i
-                scenes.append(sc)
-        previous = " ".join(s["ur"] for s in part["scenes"][-3:])
-        log(f"Chapter {i + 1}: {len(part['scenes'])} scenes")
-        time.sleep(4)
+Return ONLY JSON with one entry per chapter, in order:
+{{"chapters": [{{"scenes": [{{"ur": "narration", "type": "video|archive|image", "query": "...", "query2": "...",
+"film": "", "archive": "...", "prompt": "...", "sfx": "...", "hit": false}}]}}]}}""",
+                        keys=("chapters",), max_tokens=min(6000, 1200 + int(len(batch) * words_per_ch * 4.5)))
+        got = part["chapters"]
+        if len(got) < len(batch):
+            raise RuntimeError(f"AI wrote {len(got)} of {len(batch)} chapters")
+        for i, ch in zip(batch, got):
+            for sc in ch.get("scenes", []):
+                if str(sc.get("ur", "")).strip():
+                    sc["chapter"] = i
+                    scenes.append(sc)
+            log(f"Chapter {i + 1}: {len(ch.get('scenes', []))} scenes")
+        previous = " ".join(s["ur"] for s in scenes[-3:])
     outline["scenes"] = scenes
+    log(f"Story written with {LLM_STATE['calls']} AI requests")
     return outline
 
 
 # =============================================================== 2. VOICE (Google TTS)
+# The narration is spoken in long passages (a whole chapter part per request) instead of one request per
+# sentence: the voice keeps its natural flow and intonation, and a video needs ~8 requests instead of ~80.
+# Scene timings are then found by snapping each sentence boundary to the nearest real pause in the audio.
 
-GEMINI_TTS = {"on": bool(os.getenv("GEMINI_API_KEY")) and (os.getenv("TTS_ENGINE") or "gemini") == "gemini",
-              "fails": 0}
-VOICE_STYLE = ("You are a famous Urdu dark-history and true-crime storyteller on YouTube. Narrate this in "
-               "natural, fluent Urdu with real emotion and suspense, at a confident natural pace (never slow, "
-               "never like reading from paper): dramatic pauses at '...', a lower, almost whispering voice for "
-               "scary parts, shock and surprise at '!', and a direct questioning tone when asking the viewer.")
+GEMINI_TTS = {"on": bool(os.getenv("GEMINI_API_KEY")) and (os.getenv("TTS_ENGINE") or "gemini") == "gemini"}
+TTS_CHUNK_BYTES = int(os.getenv("TTS_CHUNK_BYTES") or 2800)
+VOICE_STYLE = (f"You are a famous {'English' if LANG == 'en' else 'Urdu'} dark-history storyteller on YouTube. "
+               "Narrate this like you are telling it to a friend late at night: natural, warm and fluent, with "
+               "real emotion and suspense, a confident relaxed pace (never slow, never like reading from paper), "
+               "short pauses at '...', a lower, quieter voice for the scary parts and a direct questioning tone "
+               "when asking the viewer.")
+
+
+def speakable(text):
+    """Small clean-ups that stop TTS from sounding robotic (ALL-CAPS spelled out, stacked marks)."""
+    t = re.sub(r"\b([A-Z]{4,})\b", lambda m: m.group(1).capitalize(), text)
+    t = re.sub(r"\.{4,}", "...", t)
+    t = re.sub(r"([!?]){2,}", r"\1", t)
+    return re.sub(r"\s+", " ", t).strip()
 
 
 def gemini_tts(text, path):
-    """Expressive Gemini voice (AI Studio key). Returns False to fall back to the normal Google voice."""
-    key = os.getenv("GEMINI_API_KEY")
+    key = os.environ["GEMINI_API_KEY"]
     voice = os.getenv("GEMINI_VOICE") or "Charon"
-    for model in [os.getenv("GEMINI_TTS_MODEL") or "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"]:
+    last = None
+    for model in [os.getenv("GEMINI_TTS_MODEL") or "gemini-2.5-flash-preview-tts"]:
         body = {"contents": [{"parts": [{"text": VOICE_STYLE + "\n\nText:\n" + text}]}],
                 "generationConfig": {"responseModalities": ["AUDIO"], "speechConfig": {
                     "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}}
-        for attempt in range(5):
+        for attempt in range(4):
             try:
                 r = http(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
-                         body, timeout=180)
+                         body, timeout=300)
                 data = r["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
                 pcm = Path(str(path) + ".pcm")
                 pcm.write_bytes(base64.b64decode(data))
                 run(["ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", pcm,
                      "-af", "silenceremove=start_periods=1:start_threshold=-50dB,areverse,"
                             "silenceremove=start_periods=1:start_threshold=-50dB,areverse",
-                     "-b:a", "160k", path])
+                     "-b:a", "192k", path])
                 pcm.unlink(missing_ok=True)
-                GEMINI_TTS["used"] = True
-                return True
+                return
             except urllib.error.HTTPError as e:
-                msg = e.read()[:200]
+                body_txt = e.read()[:300]
+                last = f"HTTP {e.code} {body_txt!r}"
+                if e.code in (401, 402, 403, 404):
+                    GEMINI_TTS["on"] = False  # billing/key problem: don't keep asking
+                    break
                 if e.code in (429, 500, 503):
-                    time.sleep(8 * (attempt + 1))
+                    wait = retry_after(e, body_txt) or 10 * (attempt + 1)
+                    if wait > MAX_WAIT:
+                        break
+                    time.sleep(wait + 1)
                     continue
-                log(f"Gemini voice {model}: HTTP {e.code} {msg!r}")
                 break
-            except Exception as e:
-                log(f"Gemini voice {model}: {e}")
-                time.sleep(3)
-    if GEMINI_TTS.get("used"):  # never mix two different voices inside one video
-        log("Gemini voice failed mid-video, waiting and retrying once more")
-        time.sleep(90)
-        if GEMINI_TTS.get("retry_done"):
-            raise RuntimeError("Gemini voice stopped working in the middle of the video")
-        GEMINI_TTS["retry_done"] = True
-        return gemini_tts(text, path)
-    GEMINI_TTS["on"] = False
-    log("Gemini voice not available - using normal Google voice")
-    return False
+    raise RuntimeError(f"Gemini voice: {last}")
 
 
-def tts(text, path, offline=False):
-    if offline:
-        sec = max(2.5, len(text) / 14)
-        run(["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=f=180:r=24000", "-af", "volume=0.05",
-             "-t", f"{sec:.2f}", path])
-        return
-    if GEMINI_TTS["on"] and gemini_tts(text, path):
-        return
+def google_tts(text, path):
     key = os.environ["GOOGLE_TTS_KEY"]
-    rate = float(os.getenv("TTS_RATE") or 1.15)
+    rate = float(os.getenv("TTS_RATE") or 1.05)
     last = None
     for voice in list(TTS_VOICES):
         body = {"input": {"text": text},
                 "voice": {"languageCode": "-".join(voice.split("-")[:2]), "name": voice},
                 "audioConfig": {"audioEncoding": "MP3", "speakingRate": rate, "sampleRateHertz": 24000}}
-        for attempt in range(3):
+        for attempt in range(4):
             try:
-                r = http(f"https://texttospeech.googleapis.com/v1/text:synthesize?key={key}", body, timeout=120)
+                r = http(f"https://texttospeech.googleapis.com/v1/text:synthesize?key={key}", body, timeout=180)
                 Path(path).write_bytes(base64.b64decode(r["audioContent"]))
                 if voice != TTS_VOICES[0]:  # remember a working voice for the rest of the video
                     TTS_VOICES.remove(voice)
                     TTS_VOICES.insert(0, voice)
                 return
             except urllib.error.HTTPError as e:
-                last = f"{voice}: {e.code} {e.read()[:300]!r}"
+                body_txt = e.read()[:300]
+                last = f"{voice}: {e.code} {body_txt!r}"
                 if e.code in (429, 500, 503):
-                    time.sleep(5 * (attempt + 1))
+                    time.sleep(min(MAX_WAIT, retry_after(e, body_txt) or 6 * (attempt + 1)))
                     continue
                 break
             except Exception as e:
@@ -396,6 +701,82 @@ def tts(text, path, offline=False):
                 time.sleep(3)
         log(f"TTS voice failed -> {last}")
     raise RuntimeError(f"Google TTS failed: {last}")
+
+
+def tts_chunks(scenes):
+    """Groups scenes into passages: same chapter and under the TTS request size limit."""
+    chunks, cur, size = [], [], 0
+    for i, sc in enumerate(scenes):
+        b = len(sc["ur"].encode()) + 1
+        if cur and (scenes[cur[-1]]["chapter"] != sc["chapter"] or size + b > TTS_CHUNK_BYTES):
+            chunks.append(cur)
+            cur, size = [], 0
+        cur.append(i)
+        size += b
+    return chunks + [cur] if cur else chunks
+
+
+def pauses(path):
+    """Middle points of the pauses in a narration file."""
+    r = subprocess.run(["ffmpeg", "-i", str(path), "-af", "silencedetect=noise=-35dB:d=0.14", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    st = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
+    en = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
+    return [(s + e) / 2 for s, e in zip(st, en)]
+
+
+def split_points(texts, total, mids):
+    """End time of each scene inside one continuous passage: expected spot from the text length,
+    snapped to the nearest real pause so a cut never lands in the middle of a word."""
+    lens = [len(t) + 2 for t in texts]
+    ends, cum, prev = [], 0, 0.0
+    for n in lens[:-1]:
+        cum += n
+        guess = total * cum / sum(lens)
+        near = [m for m in mids if prev + 0.8 < m < total - 0.8]
+        best = min(near, key=lambda m: abs(m - guess), default=None)
+        t = best if best is not None and abs(best - guess) < 2.5 else max(guess, prev + 0.8)
+        ends.append(min(t, total - 0.5))
+        prev = ends[-1]
+    return ends + [total]
+
+
+def narrate(scenes, work, offline):
+    """Speaks the whole story; writes work/voice.wav and returns the duration of every scene."""
+    engines = ["offline"] if offline else (["gemini"] if GEMINI_TTS["on"] else []) + ["google"]
+    chunks = tts_chunks(scenes)
+    for engine in engines:
+        try:
+            durs, wavs = [0.0] * len(scenes), []
+            for k, idx in enumerate(chunks):
+                text = " ".join(speakable(scenes[i]["ur"]) for i in idx)
+                raw = work / f"vo_{k:03d}.mp3"
+                if engine == "offline":
+                    run(["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=f=180:r=24000", "-af", "volume=0.05",
+                         "-t", f"{max(2.5, len(text) / 14):.2f}", raw])
+                elif engine == "gemini":
+                    gemini_tts(text, raw)
+                else:
+                    google_tts(text, raw)
+                nxt = chunks[k + 1][0] if k + 1 < len(chunks) else None
+                pad = 0.8 if nxt is not None and scenes[nxt]["chapter"] != scenes[idx[0]]["chapter"] else 0.25
+                wav = work / f"vo_{k:03d}.wav"
+                run(["ffmpeg", "-y", "-i", raw, "-af", f"apad=pad_dur={pad},aresample=44100", "-ac", "2", wav])
+                total = duration(wav)
+                ends = split_points([scenes[i]["ur"] for i in idx], total - pad, pauses(raw))
+                ends[-1] = total
+                prev = 0.0
+                for i, e in zip(idx, ends):
+                    durs[i], prev = e - prev, e
+                wavs.append(wav)
+            (work / "auds.txt").write_text("".join(f"file '{w.name}'\n" for w in wavs))
+            run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", work / "auds.txt", "-c:a", "pcm_s16le",
+                 work / "voice.wav"])
+            log(f"Voice: {engine}, {len(chunks)} requests for {len(scenes)} scenes")
+            return durs
+        except Exception as e:  # never mix two voices: the next engine redoes the whole narration
+            log(f"Voice engine {engine} failed: {str(e)[:300]}")
+    raise RuntimeError("No voice engine worked (check GOOGLE_TTS_KEY)")
 
 
 # =============================================================== 3. VISUALS
@@ -440,49 +821,114 @@ def commons(query, used):
     return None
 
 
-def pexels_video(query, used):
+VID_CACHE, VID_OFF = {}, set()  # one search per query (results reused), sources off after a 429
+
+
+def pexels_search(query):
     key = os.getenv("PEXELS_API_KEY")
-    if not key:
-        return None
-    url = ("https://api.pexels.com/videos/search?orientation=landscape&size=medium&per_page=15&query="
+    if not key or "pexels" in VID_OFF:
+        return []
+    url = ("https://api.pexels.com/videos/search?orientation=landscape&size=medium&per_page=30&query="
            + urllib.parse.quote(query))
     try:
         vids = http(url, headers={"Authorization": key}, timeout=40).get("videos", [])
+    except urllib.error.HTTPError as e:
+        log(f"Pexels failed '{query}': {e}")
+        if e.code == 429:
+            VID_OFF.add("pexels")
+        return []
     except Exception as e:
         log(f"Pexels failed '{query}': {e}")
-        return None
+        return []
+    out = []
     for v in vids:
-        if v["id"] in used or v.get("duration", 0) < 4:
+        slug = (v.get("url") or "").rstrip("/").split("/")[-1]  # e.g. waves-crashing-on-rocks-1234
+        if v.get("duration", 0) < 4 or looks_modern(slug.replace("-", " ")):
             continue
         files = [f for f in v.get("video_files", []) if f.get("width") and 1280 <= f["width"] <= 2560
                  and f.get("file_type") == "video/mp4"]
-        if not files:
-            continue
-        f = sorted(files, key=lambda f: f["width"])[0]
-        return v["id"], f["link"], f"Video by {v.get('user', {}).get('name', 'Pexels')} on Pexels"
-    return None
+        if files:
+            f = sorted(files, key=lambda f: f["width"])[0]
+            out.append((f"px{v['id']}", f["link"], f"Video by {v.get('user', {}).get('name', 'Pexels')} on Pexels"))
+    return out
 
 
-def pixabay_video(query, used):
+def pixabay_search(query):
     key = os.getenv("PIXABAY_API_KEY")
-    if not key:
-        return None
-    url = (f"https://pixabay.com/api/videos/?key={key}&safesearch=true&per_page=20&q="
+    if not key or "pixabay" in VID_OFF:
+        return []
+    url = (f"https://pixabay.com/api/videos/?key={key}&safesearch=true&per_page=30&q="
            + urllib.parse.quote(query[:100]))
     try:
         hits = http(url, timeout=40).get("hits", [])
+    except urllib.error.HTTPError as e:
+        log(f"Pixabay failed '{query}': {e}")
+        if e.code == 429:
+            VID_OFF.add("pixabay")
+        return []
     except Exception as e:
         log(f"Pixabay failed '{query}': {e}")
-        return None
+        return []
+    out = []
     for v in hits:
-        vid = f"pb{v['id']}"
-        if vid in used or v.get("duration", 0) < 4 or looks_modern(v.get("tags")):
+        if v.get("duration", 0) < 4 or looks_modern(v.get("tags")):
             continue
         files = v.get("videos", {})
         for size in ("medium", "large", "small"):
             f = files.get(size) or {}
             if f.get("url") and 1200 <= (f.get("width") or 0) <= 2600:
-                return vid, f["url"], f"Video by {v.get('user', 'Pixabay')} on Pixabay"
+                out.append((f"pb{v['id']}", f["url"], f"Video by {v.get('user', 'Pixabay')} on Pixabay"))
+                break
+    return out
+
+
+def stock_video(queries, used, alt=0):
+    """First unused clip for the queries; Pexels and Pixabay take turns so neither hits its limit."""
+    sources = [("px", pexels_search), ("pb", pixabay_search)]
+    if alt % 2:
+        sources.reverse()
+    for q in [q for q in queries if q]:
+        for tag, fn in sources:
+            if (tag, q) not in VID_CACHE:
+                VID_CACHE[(tag, q)] = fn(q)
+            for c in VID_CACHE[(tag, q)]:
+                if c[0] not in used:
+                    return c
+    return None
+
+
+def commons_video(query, used, dur, out):
+    """Real historical film (newsreels etc.) from Wikimedia Commons, cut straight from the file."""
+    q = urllib.parse.quote(f"{query} filetype:video")
+    url = ("https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search"
+           f"&gsrsearch={q}&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url|size|extmetadata")
+    try:
+        time.sleep(1.2)
+        pages = http(url, timeout=40).get("query", {}).get("pages", {})
+    except Exception as e:
+        log(f"Commons video failed '{query}': {e}")
+        return None
+    for p in sorted(pages.values(), key=lambda p: p.get("index", 99)):
+        ii = (p.get("imageinfo") or [{}])[0]
+        meta = ii.get("extmetadata", {})
+        lic = meta.get("LicenseShortName", {}).get("value", "")
+        src = ii.get("url")
+        if (not src or src in used or ii.get("width", 0) < 400
+                or not any(k in lic.lower() for k in OK_LICENSES) or "-nd" in lic.lower() or " nc" in lic.lower()):
+            continue
+        length = float(ii.get("duration") or 0)
+        start = length * 0.12 if length > dur * 2 else 0  # skip title cards at the start of old films
+        try:
+            run(["ffmpeg", "-y", "-user_agent", UA, "-ss", f"{start:.1f}", "-i", src, "-t", f"{dur + 1:.2f}",
+                 "-an", "-vf", f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}",
+                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", out], timeout=300)
+            if duration(out) < min(3, dur):
+                continue
+        except Exception as e:
+            log(f"Commons film skip {p.get('title')}: {str(e)[:120]}")
+            continue
+        artist = re.sub(r"<[^>]+>", "", meta.get("Artist", {}).get("value", ""))[:60].strip() or "Unknown"
+        return src, f"{p['title'].replace('File:', '')} - {artist} ({lic}), Wikimedia Commons"
     return None
 
 
@@ -502,12 +948,6 @@ def pixabay_image(query, used):
         if src and src not in used and not looks_modern(h.get("tags")):
             return src, f"Image by {h.get('user', 'Pixabay')} on Pixabay"
     return None
-
-
-def stock_video(query, used):
-    q2 = " ".join(query.split()[:2])
-    return (pexels_video(query, used) or pixabay_video(query, used)
-            or pexels_video(q2, used) or pixabay_video(q2, used))
 
 
 SETTING = ""
@@ -568,21 +1008,33 @@ def download(url, path):
     Path(path).write_bytes(body)
 
 
-def gather_visuals(scenes, work, offline):
+def gather_visuals(scenes, work, offline, durs):
+    """Real video clips for almost every scene; archive photos only for named people/places,
+    AI pictures only as a last resort."""
     used_img, used_vid, credits = set(), set(), []
-    ai_ok = 0
+    stats = {"film": 0, "video": 0, "archive": 0, "image": 0}
     for i, sc in enumerate(scenes):
-        want = sc.get("type", "image")
-        order = {"video": ["video", "image", "archive"], "image": ["image", "archive", "video"],
-                 "archive": ["archive", "image", "video"]}.get(want, ["image", "archive", "video"])
+        want = sc.get("type", "video")
+        order = {"video": ["film", "video", "archive", "image"], "archive": ["archive", "film", "video", "image"],
+                 "image": ["video", "image", "archive"]}.get(want, ["film", "video", "archive", "image"])
+        if i > 0 and scenes[i - 1].get("kind") == "image" and "video" in order:  # never two stills in a row
+            order = ["film", "video"] + [k for k in order if k not in ("film", "video")]
         if not sc.get("prompt"):
             sc["prompt"] = sc.get("query") or sc.get("archive") or ""
         sc["asset"], sc["kind"] = None, None
         if not offline:
             for kind in order:
                 try:
-                    if kind == "video" and sc.get("query"):
-                        got = stock_video(sc["query"], used_vid)
+                    if kind == "film" and sc.get("film"):
+                        p = work / f"h_{i:03d}.mp4"
+                        got = commons_video(sc["film"], used_vid, durs[i], p)
+                        if got:
+                            used_vid.add(got[0])
+                            credits.append(got[1])
+                            sc["asset"], sc["kind"] = p, "video"
+                    elif kind == "video":
+                        q = sc.get("query") or ""
+                        got = stock_video([q, sc.get("query2"), " ".join(q.split()[:2])], used_vid, i)
                         if got:
                             p = work / f"v_{i:03d}.mp4"
                             download(got[1], p)
@@ -593,7 +1045,6 @@ def gather_visuals(scenes, work, offline):
                         p = work / f"i_{i:03d}.jpg"
                         if ai_image(sc["prompt"], p, 1000 + i):
                             sc["asset"], sc["kind"] = p, "image"
-                            ai_ok += 1
                         elif sc.get("query"):
                             got = pixabay_image(sc["query"], used_img) or pixabay_image(" ".join(sc["query"].split()[:2]), used_img)
                             if got:
@@ -615,6 +1066,7 @@ def gather_visuals(scenes, work, offline):
                 except Exception as e:
                     log(f"Scene {i} {kind} failed: {e}")
                 if sc["asset"]:
+                    stats[kind] += 1
                     break
         if not sc["asset"] and offline:
             p = work / f"p_{i:03d}.jpg"
@@ -623,13 +1075,15 @@ def gather_visuals(scenes, work, offline):
         if i % 10 == 0:
             log(f"Visuals {i + 1}/{len(scenes)}")
     real = [s for s in scenes if s.get("asset")]
-    log(f"Real visuals found for {len(real)}/{len(scenes)} scenes (AI pictures: {ai_ok})")
+    log(f"Visuals for {len(real)}/{len(scenes)} scenes - historical film {stats['film']}, stock video "
+        f"{stats['video']}, archive photos {stats['archive']}, AI pictures {stats['image']}")
     if not offline and len(real) < max(5, 0.5 * len(scenes)):
         raise RuntimeError(f"Only {len(real)} real visuals found - refusing to make a low-quality video. "
-                           "Add PIXABAY_API_KEY / CF_ACCOUNT_ID + CF_API_TOKEN secrets.")
-    for i, sc in enumerate(scenes):  # fill gaps by re-using real footage (different crop/motion)
+                           "Add PEXELS_API_KEY / PIXABAY_API_KEY secrets.")
+    vids = [s for s in real if s["kind"] == "video"] or real
+    for i, sc in enumerate(scenes):  # fill gaps by re-using real footage (different part of the clip)
         if not sc.get("asset"):
-            src = real[(i * 7) % len(real)]
+            src = vids[(i * 7) % len(vids)]
             sc["asset"], sc["kind"] = src["asset"], src["kind"]
     return list(dict.fromkeys(credits))
 
@@ -684,11 +1138,22 @@ def animate_still(frame, dur, idx, out, w=W, h=H):
          "-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-an", out])
 
 
-def video_clip(src, dur, out, w=W, h=H):
-    vf = (f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={FPS},"
+def video_clip(src, dur, out, w=W, h=H, idx=0):
+    """Fits a real clip to the scene: a short clip plays in gentle slow motion instead of visibly looping,
+    a long one starts at a different point each time it is used."""
+    try:
+        have = duration(src)
+    except Exception:
+        have = dur
+    slow, start = "", 0.0
+    if 0 < have < dur <= have * 1.8:
+        slow = f"setpts={dur / have:.4f}*PTS,"
+    elif have > dur + 1:
+        start = (have - dur) * ((idx * 0.37) % 1)
+    vf = (f"{slow}scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={FPS},"
           "eq=saturation=0.78:contrast=1.06:brightness=-0.02,format=yuv420p")
-    run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", src, "-t", f"{dur:.3f}", "-vf", vf, "-an",
-         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", out])
+    run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-stream_loop", "-1", "-i", src, "-t", f"{dur:.3f}", "-vf", vf,
+         "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", out])
 
 
 def make_dust(path, seconds=8):
@@ -963,27 +1428,19 @@ def chunk_captions(scenes, starts, durs, t0=0.0, t1=1e9, words=4):
 def render_long(story, work, offline):
     scenes = story["scenes"]
     log(f"Voice for {len(scenes)} scenes...")
-    auds, durs = [], []
-    for i, sc in enumerate(scenes):
-        raw = work / f"vo_{i:03d}.mp3"
-        tts(sc["ur"], raw, offline)
-        wav = work / f"vo_{i:03d}.wav"
-        pad = 0.7 if (i + 1 < len(scenes) and scenes[i + 1]["chapter"] != sc["chapter"]) else 0.12
-        run(["ffmpeg", "-y", "-i", raw, "-af", f"apad=pad_dur={pad},aresample=44100", "-ac", "2", wav])
-        auds.append(wav)
-        durs.append(duration(wav))
+    durs = narrate(scenes, work, offline)
     total = sum(durs)
     log(f"Narration: {total / 60:.1f} min")
 
     log("Visuals...")
-    credits = gather_visuals(scenes, work, offline)
+    credits = gather_visuals(scenes, work, offline, durs)
 
     log("Scene clips...")
     clips = []
     for i, (sc, du) in enumerate(zip(scenes, durs)):
         clip = work / f"c_{i:03d}.mp4"
         if sc["kind"] == "video":
-            video_clip(sc["asset"], du, clip)
+            video_clip(sc["asset"], du, clip, idx=i)
         else:
             fr = work / f"f_{i:03d}.jpg"
             still_frame(sc["asset"], fr, W, H)
@@ -997,9 +1454,7 @@ def render_long(story, work, offline):
         t += d
 
     (work / "clips.txt").write_text("".join(f"file '{c.name}'\n" for c in clips))
-    (work / "auds.txt").write_text("".join(f"file '{a.name}'\n" for a in auds))
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", work / "clips.txt", "-c", "copy", work / "visual.mp4"])
-    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", work / "auds.txt", "-c:a", "pcm_s16le", work / "voice.wav"])
     music = pick_music(total, work, story["title"])
     sfx = build_sfx(scenes, durs, work)
     dust = work / "dust.mp4"
@@ -1060,6 +1515,12 @@ def thumbnail(story, work, offline):
     if offline or not ai_image(story.get("thumbnail_prompt", story["title"]), base_path, 7):
         cand = [s["asset"] for s in story["scenes"] if s.get("kind") == "image"]
         base_path = cand[0] if cand else None
+        vids = [s["asset"] for s in story["scenes"] if s.get("kind") == "video"]
+        if not base_path and vids:  # mostly-video story: use a frame of an early clip
+            try:
+                base_path = grab(vids[min(2, len(vids) - 1)], 1.0, work / "thumb_base.jpg")
+            except Exception as e:
+                log(f"Thumbnail frame failed: {e}")
     if base_path:
         base = ImageOps.fit(Image.open(base_path).convert("RGB"), (Wt, Ht), Image.LANCZOS, centering=(0.6, 0.45))
         base = ImageEnhance.Contrast(ImageEnhance.Color(base).enhance(1.1)).enhance(1.2)
@@ -1235,7 +1696,7 @@ def main():
             except Exception as e:
                 log(f"Short upload failed: {e}")
 
-    if not a.offline:
+    if results:  # a --no-upload test run does not use up the topic
         with open(DATA / "topics_done.txt", "a", encoding="utf-8") as f:
             f.write(story["topic"].strip() + "\n")
         with open(DATA / "upload_log.csv", "a", encoding="utf-8") as f:

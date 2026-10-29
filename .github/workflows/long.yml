@@ -9,6 +9,11 @@ on:
         description: "public / unlisted / private"
         required: false
         default: ""
+      upload:
+        description: "Upload to YouTube? (no = test run, video only in Artifacts)"
+        type: choice
+        options: ["yes", "no"]
+        default: "yes"
 
 permissions:
   contents: write
@@ -35,6 +40,9 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
           GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
@@ -46,8 +54,9 @@ jobs:
           CHANNEL_NAME: ${{ vars.CHANNEL_NAME || 'Dark History' }}
           PRIVACY: ${{ inputs.privacy || vars.PRIVACY || 'public' }}
           TTS_VOICE: ${{ vars.TTS_VOICE }}
+          TTS_RATE: ${{ vars.TTS_RATE }}
           LONG_MINUTES: ${{ vars.LONG_MINUTES || '11' }}
-        run: python agent/studio.py
+        run: python agent/studio.py ${{ inputs.upload == 'no' && '--no-upload' || '' }}
       - name: Save topic list and log
         if: always()
         run: |

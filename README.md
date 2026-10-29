@@ -30,7 +30,24 @@ Sardiyon mein (GMT) yeh sab 1 ghanta pehle chalein ge. GitHub kabhi kabhi 5–30
 | PEXELS_API_KEY | Nahi | pexels.com/api (free, extra tasveerein) |
 | ELEVENLABS_API_KEY | Nahi | elevenlabs.io (paid, aur zyada asli awaaz) |
 
-Variables (optional): `PRIVACY` = public / unlisted / private, `CHANNEL_NAME`.
+Variables (optional): `PRIVACY` = public / unlisted / private, `CHANNEL_NAME`, `TTS_RATE` (awaaz ki speed, default 1.05).
+
+### Documentary + Shorts (studio.py) – sab free
+| Name | Zaroori? | Kaam |
+|---|---|---|
+| GROQ_API_KEY | Haan | console.groq.com (free) – script likhta hai |
+| GOOGLE_TTS_KEY | Haan | Google Cloud Text-to-Speech (Chirp HD free tier) – awaaz |
+| PEXELS_API_KEY, PIXABAY_API_KEY | Haan | asli video clips (free) |
+| OPENROUTER_API_KEY | Nahi | openrouter.ai (free) – Groq busy ho to sirf `:free` models |
+| GEMINI_API_KEY | Nahi | sirf **free-tier** project ki key (billing wale project par 402 aata hai) |
+| CF_ACCOUNT_ID, CF_API_TOKEN | Nahi | Cloudflare free – aakhri backup writer + AI tasveer |
+| YT_API_KEY | Nahi | YouTube Data API key – trending dark-history videos dekh kar topic chunta hai |
+
+Topic roz trending data se chuna jata hai (YouTube par chalne wali dark-history videos, Wikipedia par
+sab se zyada parhe jane wale history articles, aur is hafte ki barsiyan), aur facts Wikipedia se check hote hain.
+Har run mein sirf 3–4 AI requests jati hain; 429 aaye to API jitna kahe utna wait karke dobara koshish hoti hai.
+
+Test run: Actions → "Daily Documentary + Shorts" → Run workflow → upload = **no** (video sirf Artifacts mein aati hai).
 
 ## Hath se chalana
 Actions tab → "Daily Shorts" ya "Daily Long Video" → **Run workflow**.
