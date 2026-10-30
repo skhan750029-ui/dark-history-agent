@@ -36,6 +36,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg fonts-dejavu-core fonts-noto-core
           pip install -q pillow
+          # Anton: free bold caption font (SIL Open Font License) from the Google Fonts repository
+          mkdir -p ~/.local/share/fonts
+          curl -fsSL -o ~/.local/share/fonts/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf || echo "Anton font not downloaded - using DejaVu Sans"
+          fc-cache -f >/dev/null
       - name: Make and upload documentary + shorts
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}

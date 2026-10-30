@@ -347,6 +347,11 @@ NOT_STORY = re.compile(r"footballer|cricketer|singer|rapper|actor|actress|\bfilm
                        r"album|song|video game|election|politician|company|tournament|league|\bcup\b|\bband\b|"
                        r"wrestler|youtuber|player|musician|episode|novel|comic|franchise|streamer", re.I)
 OLD = re.compile(r"\b(1[0-9]{3}|200[0-5])\b|\bBC\b|century|ancient|medieval|historic", re.I)
+# Topics tied to conflicts that are still alive today (or mass atrocities): never offered to the writer.
+SENSITIVE = re.compile(r"israel|palestin|gaza|west bank|zionis|hamas|hezbollah|nakba|ukrain|crimea|chechn|kashmir|"
+                       r"partition of india|armenian|kurd|rohingya|uyghur|tibet|taiwan|korean war|troubles|\bIRA\b|"
+                       r"holocaust|genocide|ethnic cleansing|pogrom|terror|jihad|isis|taliban|al-qaeda|sectarian|"
+                       r"apartheid|lynch|slave", re.I)
 
 
 def yt_trending(limit=15):
@@ -409,7 +414,7 @@ def wiki_trending(limit=12):
             log(f"Wikipedia descriptions failed: {e}")
     hits = [(t, desc.get(t, ""), v) for t, v in views.items()
             if DARK.search(f"{t} {desc.get(t, '')}") and not NOT_STORY.search(desc.get(t, ""))
-            and OLD.search(f"{t} {desc.get(t, '')}")]
+            and OLD.search(f"{t} {desc.get(t, '')}") and not SENSITIVE.search(f"{t} {desc.get(t, '')}")]
     return sorted(hits, key=lambda h: -h[2])[:limit]
 
 
@@ -430,6 +435,8 @@ def on_this_day(days=4, limit=10):
             pages = ev.get("pages") or [{}]
             pg = next((p for p in pages if DARK.search(p.get("description", "") + p.get("title", ""))), pages[0])
             title = (pg.get("normalizedtitle") or pg.get("title", "")).replace("_", " ")
+            if SENSITIVE.search(" ".join([ev.get("text", ""), title] + [p.get("description", "") for p in pages])):
+                continue
             out.append((title, f"{d:%d %b} {ev['year']}: {ev['text']}"))
     return out[:limit]
 
@@ -494,9 +501,11 @@ For every scene choose the visual:
 - "query": 2-4 simple English words for stock-footage search of a clip that exists on Pexels/Pixabay
   (e.g. "stormy ocean night", "candle flame dark", "old ship sailing").
 - "query2": a second, more general 2-3 word search in case the first finds nothing (e.g. "dark ocean").
-- "film": ONLY if real film footage of this exact event/era exists (after 1895: newsreels, war,
-  disasters, ships) 2-4 English words to search Wikimedia Commons videos, e.g. "Titanic 1912 film",
-  else "".
+- "film": real old film footage is the BEST visual. If the story happens after 1895, give "film" for
+  as many scenes as possible: 2-4 English words to search Wikimedia Commons videos - the exact event if
+  filmed ("Titanic 1912 film"), otherwise period footage of the same thing ("1950s newsreel airliner",
+  "1920s steamship harbor", "World War II bomber"). Before 1895 or nothing fitting: "".
+- The clip must SHOW what the line says (the object, place or action named in it), not just a mood.
 - "archive": 2-5 English words to search Wikimedia Commons photos (names, places, years).
 - "prompt": English prompt for an AI picture of the scene (backup only): subject, era, place, lighting.
   Photorealistic cinematic film still, moody, 35mm. No text, no gore, no real faces in close-up."""
@@ -514,9 +523,34 @@ MODERN = {"city", "cities", "urban", "skyline", "concert", "neon", "party", "clu
           "aircraft", "bridge", "nightlife", "lights", "fashion", "model", "woman", "man", "girl", "boy"}
 
 
-def looks_modern(tags):
+def looks_modern(tags, query=""):
+    """Modern things are rejected unless the scene asked for exactly that thing (e.g. 'military aircraft')."""
     words = set(re.split(r"[^a-z]+", (tags or "").lower()))
-    return bool(words & MODERN)
+    return bool((words & MODERN) - set(re.split(r"[^a-z]+", query.lower())))
+
+
+# Clips that make a documentary look cheap: always rejected, whatever the scene asked for.
+BAD_CLIP = re.compile(r"cartoon|animat|anime|green.?screen|chroma|blue.?screen|\b3d\b|render|cgi|vector|"
+                      r"illustrat|motion.?graphic|character|emoji|mascot|plasma|laser|hologram|futuristic|sci.?fi|"
+                      r"glitch|particle|abstract|bokeh|loop(able)?\b|seamless|logo|\btext\b|\btitle|typograph|lettering|"
+                      r"countdown|subscribe|banner|intro|outro|overlay|transition|template|mockup|screen\b|monitor|"
+                      r"subway|metro|escalator|station|mall|airport|crowd|pedestrian|commuter|tourist|walking people|"
+                      r"people walking|covid|corona|face mask|vr\b|robot|toy|kids?\b|children playing|wedding|"
+                      r"yoga|fitness|workout|cooking|food|coffee|smiling|happy|cheerful|business", re.I)
+STOP = {"old", "dark", "the", "a", "an", "of", "in", "on", "at", "and", "with", "night", "scene", "shot",
+        "footage", "video", "film", "clip", "close", "up", "view", "slow", "motion", "vintage", "historic",
+        "historical", "cinematic", "dramatic", "moody", "background"}
+
+
+def relevance(query, desc):
+    """How many of the query's meaningful words (by 4-letter stem) appear in the clip's name/tags."""
+    have = {w[:4] for w in re.split(r"[^a-z0-9]+", (desc or "").lower()) if len(w) > 2}
+    want = {w[:4] for w in re.split(r"[^a-z0-9]+", query.lower()) if len(w) > 2 and w not in STOP}
+    return len(want & have)
+
+
+def clip_ok(desc, query):
+    return not BAD_CLIP.search(desc or "") and not looks_modern(desc, query)
 
 
 def is_used(topic, done):
@@ -567,9 +601,23 @@ def normalize_outline(o, n_ch=5):
             c = min(max(int(sh.get("chapter", 0)), 0), len(fixed) - 1)
         except (TypeError, ValueError):
             c = 0
-        shorts.append({"chapter": c, "title": text(sh.get("title"), fixed[c]["title"])[:90]})
-    o["shorts"] = shorts or [{"chapter": c, "title": fixed[c]["title"]} for c in sorted({0, min(2, len(fixed) - 1)})]
+        shorts.append({"chapter": c, "title": text(sh.get("title"), fixed[c]["title"])[:90],
+                       "hook": text(sh.get("hook")), "loop": text(sh.get("loop"))})
+    o["shorts"] = shorts or [{"chapter": c, "title": fixed[c]["title"], "hook": "", "loop": ""}
+                             for c in sorted({0, min(2, len(fixed) - 1)})]
+    o["hook"] = text(o.get("hook"))
+    o["hook_query"] = text(o.get("hook_query"), "dark storm night")
+    o["hook_film"] = text(o.get("hook_film"))
+    try:
+        o["reveal_chapter"] = min(max(int(o.get("reveal_chapter")), 1), len(fixed) - 1)
+    except (TypeError, ValueError):
+        o["reveal_chapter"] = max(1, int(len(fixed) * 0.75 + 0.5) - 1)  # biggest reveal at ~70-80% of the video
     return o
+
+
+REJECTED = []  # topics turned down in this run (repeated / sensitive), so the retry picks another
+GREETING = re.compile(r"\b(welcome|hello|hi there|hey guys|assalam|salaam|in this video|in today's video|"
+                      r"subscribe|my name is)\b", re.I)
 
 
 def scene_list(ch):
@@ -597,7 +645,7 @@ def scene_list(ch):
 def write_story(minutes):
     """3-4 AI requests in total: 1 outline (picks a trending topic) + the narration 2 chapters at a time."""
     done = used_topics()
-    avoid = "\n".join(f"- {t}" for t in done[-300:]) or "- (none yet)"
+    avoid = "\n".join(f"- {t}" for t in done[-300:] + REJECTED) or "- (none yet)"
     n_ch = max(4, round(minutes / 2.3))
     trends = trend_signals() or "(no trend data today - pick a story with strong search interest)"
     outline = ask_json(f"""You are the head writer of "{CHANNEL}", a faceless YouTube channel that tells
@@ -616,8 +664,20 @@ It must NOT be any of these already-used topics:
 Never invent facts; mark legends as legends. Respect victims: no gore for shock, no glorifying violence.
 Skip stories about living people and stories tied to wars or political conflicts that are still going on.
 
-Plan a {minutes:.0f}-minute documentary with {n_ch} chapters. Return ONLY JSON:
+Plan a {minutes:.0f}-minute documentary with {n_ch} chapters, built like the best retention documentaries:
+- COLD OPEN: the very first line is a jolt - a secret or a shocking question with a real name, year or
+  place, max 25 words. No greeting, no "in this video", no channel name. Example of the tone:
+  "In 1980, America built a secret plane to rescue 52 hostages... and then made sure nobody ever heard of it."
+- Then the central QUESTION the video will answer.
+- Every chapter ends on a cliffhanger; earlier chapters only hint at the answer.
+- The BIGGEST reveal comes in chapter {max(1, int(n_ch * 0.75 + 0.5) - 1) + 1} of {n_ch} (70-80% into the video).
+- Every chapter summary names exact people, exact dates and exact places - nothing vague.
+Return ONLY JSON:
 {{"topic": "short English name of the story",
+  "hook": "the cold open line (rules above)",
+  "hook_query": "2-4 English words for the most dramatic stock-footage shot to open the video",
+  "hook_film": "2-4 English words for real historical film of this event on Wikimedia Commons, or empty",
+  "question": "the central question of the video",
   "wikipedia": "exact title of the English Wikipedia article about this story",
   "trend_reason": "which trending signal this matches and why it will get views",
   "title": "English YouTube title, max 70 chars, curiosity + truthful, may use one CAPS word",
@@ -627,12 +687,19 @@ Plan a {minutes:.0f}-minute documentary with {n_ch} chapters. Return ONLY JSON:
   "description": "English description: 2 short hook paragraphs + 'Sources:' with 2-4 real sources",
   "tags": ["12-15 English SEO tags"],
   "hashtags": ["#history", "#mystery", "..."],
-  "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells"}}],
-  "shorts": [{{"chapter": 0, "title": "English Shorts title max 60 chars"}}, {{"chapter": 2, "title": "..."}}]
-}}""", keys=("chapters",), max_tokens=3000)
+  "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells, with exact names, dates, places"}}],
+  "shorts": [{{"chapter": 0, "title": "English Shorts title max 60 chars",
+              "hook": "first line of the Short: a shocking question or secret from this chapter, max 15 words",
+              "loop": "last line of the Short, max 15 words, that flows straight back into the hook when the Short replays (e.g. ends with '...and that is exactly why' or a half-sentence the hook completes)"}},
+             {{"chapter": 2, "title": "...", "hook": "...", "loop": "..."}}]
+}}""", keys=("chapters",), max_tokens=3500)
     outline = normalize_outline(outline, n_ch)
     if is_used(outline["topic"], done):
+        REJECTED.append(outline["topic"])
         raise RuntimeError(f"repeated topic: {outline['topic']}")
+    if SENSITIVE.search(" ".join([outline["topic"], outline["title"], outline["wikipedia"]])):
+        REJECTED.append(outline["topic"])
+        raise RuntimeError(f"topic tied to a living conflict, picking another: {outline['topic']}")
     log(f"Topic: {outline['topic']} | {outline['title']} | why: {outline.get('trend_reason', '')[:160]}")
     facts = wiki_extract(outline.get("wikipedia") or outline["topic"])
 
@@ -644,10 +711,30 @@ Plan a {minutes:.0f}-minute documentary with {n_ch} chapters. Return ONLY JSON:
     words_per_ch = int(minutes * (150 if LANG == "en" else 135) / len(chapters))
     scenes, previous = [], ""
 
+    reveal = outline["reveal_chapter"]
+
+    def role(i):
+        """What this chapter must do in the story arc."""
+        if i == 0:
+            r = (f"OPENS the video right after the cold open line \"{outline['hook']}\" (already spoken - do not "
+                 f"repeat it). No greeting, no 'in this video', no channel name. Its first scene asks the "
+                 f"central question: {text(outline.get('question'), 'what really happened?')}")
+        elif i == reveal:
+            r = "contains the BIGGEST REVEAL of the whole video - the answer the viewer has been waiting for"
+        elif i < reveal:
+            r = "only HINTS at the answer, adds a new clue or twist"
+        else:
+            r = "the aftermath: what happened next and what it means today"
+        if i == len(chapters) - 1:
+            r += (f"; it ends with a chilling final thought, then asks viewers to like, comment and subscribe to "
+                  f"{CHANNEL}")
+        else:
+            r += "; its LAST scene is a cliffhanger line (e.g. 'But the real truth was still hidden...')"
+        return r
+
     def write_part(batch):
         """Narration for these chapters -> {chapter index: [scenes]} (missing chapters are simply absent)."""
-        first, last = batch[0] == 0, batch[-1] == len(chapters) - 1
-        plan = "\n".join(f"{n + 1}. {chapters[i]['title']} - {chapters[i]['summary']}"
+        plan = "\n".join(f"{n + 1}. {chapters[i]['title']} - {chapters[i]['summary']}\n   ROLE: {role(i)}"
                          for n, i in enumerate(batch))
         part = ask_json(f"""You write the narration of chapters {batch[0] + 1}-{batch[-1] + 1} of {len(chapters)} of the
 YouTube documentary "{outline['title']}" (story: {outline['topic']}).
@@ -661,8 +748,8 @@ For EACH chapter write about {words_per_ch} words of narration in {LANG_RULE}
 Write it the way a great narrator TALKS, not like an essay: varied sentence length, contractions
 (it's, didn't), natural connectors (but, and then, so), a few direct questions to the viewer,
 "..." only for real dramatic pauses (max one per scene), "!" rarely. No headings, no lists.
-End each chapter on a small cliffhanger. {'Chapter 1 starts with a powerful 2-sentence hook, then a quick "In this video..." promise.' if first else 'Continue smoothly, do not greet again.'}
-{'The last chapter ends with a chilling final thought, then asks viewers to like, comment and subscribe to ' + CHANNEL + '.' if last else ''}
+Follow each chapter's ROLE exactly. Every chapter names at least one exact person, one exact date
+(day, month, year) and one exact place from the FACTS - never "a man", "one day", "somewhere".
 Split each chapter into scenes of 1-2 sentences (8-14 seconds each when spoken).
 {VISUAL_RULES}
 {SFX_RULES}
@@ -695,6 +782,18 @@ Return ONLY JSON with one entry per chapter, in order:
         previous = " ".join(s["ur"] for s in scenes[-3:])
     if len({s["chapter"] for s in scenes}) < max(2, len(chapters) - 1):
         raise RuntimeError(f"Only {len({s['chapter'] for s in scenes})} of {len(chapters)} chapters written")
+    # cold open: the hook line is always the very first thing heard, over the most dramatic shot
+    opening = [s for s in scenes[:4] if s["chapter"] == 0]
+    scenes = [s for s in scenes if s not in opening or not (GREETING.search(s["ur"]) or CHANNEL.lower() in s["ur"].lower())]
+    if outline["hook"]:
+        scenes.insert(0, {"ur": outline["hook"], "type": "video", "query": outline["hook_query"],
+                          "query2": "dark storm night", "film": outline["hook_film"], "archive": "", "prompt":
+                          outline["thumbnail_prompt"], "sfx": "dark drone", "hit": True, "chapter": 0,
+                          "cold_open": True})
+    for i in range(len(chapters)):
+        said = " ".join(s["ur"] for s in scenes if s["chapter"] == i)
+        if said and not re.search(r"\b1[0-9]{3}\b|\b20[0-2][0-9]\b", said):
+            log(f"Note: chapter {i + 1} has no exact year in it")
     outline["scenes"] = scenes
     log(f"Story written with {LLM_STATE['calls']} AI requests")
     return outline
@@ -707,6 +806,7 @@ Return ONLY JSON with one entry per chapter, in order:
 
 GEMINI_TTS = {"on": bool(os.getenv("GEMINI_API_KEY")) and (os.getenv("TTS_ENGINE") or "gemini") == "gemini"}
 TTS_CHUNK_BYTES = int(os.getenv("TTS_CHUNK_BYTES") or 2800)
+VOICE_USED = {}  # engine that spoke the documentary, so Short hook/loop lines use the same voice
 VOICE_STYLE = (f"You are a famous {'English' if LANG == 'en' else 'Urdu'} dark-history storyteller on YouTube. "
                "Narrate this like you are telling it to a friend late at night: natural, warm and fluent, with "
                "real emotion and suspense, a confident relaxed pace (never slow, never like reading from paper), "
@@ -761,7 +861,7 @@ def gemini_tts(text, path):
 
 def google_tts(text, path):
     key = os.environ["GOOGLE_TTS_KEY"]
-    rate = float(os.getenv("TTS_RATE") or 1.05)
+    rate = float(os.getenv("TTS_RATE") or 0.95)  # a little slower = more cinematic
     last = None
     for voice in list(TTS_VOICES):
         body = {"input": {"text": text},
@@ -859,6 +959,7 @@ def narrate(scenes, work, offline):
             run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", work / "auds.txt", "-c:a", "pcm_s16le",
                  work / "voice.wav"])
             log(f"Voice: {engine}, {len(chunks)} requests for {len(scenes)} scenes")
+            VOICE_USED["engine"] = engine
             return durs
         except Exception as e:  # never mix two voices: the next engine redoes the whole narration
             log(f"Voice engine {engine} failed: {str(e)[:300]}")
@@ -914,7 +1015,7 @@ def pexels_search(query):
     key = os.getenv("PEXELS_API_KEY")
     if not key or "pexels" in VID_OFF:
         return []
-    url = ("https://api.pexels.com/videos/search?orientation=landscape&size=medium&per_page=30&query="
+    url = ("https://api.pexels.com/videos/search?orientation=landscape&size=medium&per_page=40&query="
            + urllib.parse.quote(query))
     try:
         vids = http(url, headers={"Authorization": key}, timeout=40).get("videos", [])
@@ -929,13 +1030,15 @@ def pexels_search(query):
     out = []
     for v in vids:
         slug = (v.get("url") or "").rstrip("/").split("/")[-1]  # e.g. waves-crashing-on-rocks-1234
-        if v.get("duration", 0) < 4 or looks_modern(slug.replace("-", " ")):
+        desc = " ".join([re.sub(r"[-\d]+", " ", slug)] + [str(t) for t in v.get("tags") or []])
+        if v.get("duration", 0) < 4 or not clip_ok(desc, query):
             continue
         files = [f for f in v.get("video_files", []) if f.get("width") and 1280 <= f["width"] <= 2560
                  and f.get("file_type") == "video/mp4"]
         if files:
             f = sorted(files, key=lambda f: f["width"])[0]
-            out.append((f"px{v['id']}", f["link"], f"Video by {v.get('user', {}).get('name', 'Pexels')} on Pexels"))
+            out.append((f"px{v['id']}", f["link"], f"Video by {v.get('user', {}).get('name', 'Pexels')} on Pexels",
+                        desc))
     return out
 
 
@@ -943,7 +1046,7 @@ def pixabay_search(query):
     key = os.getenv("PIXABAY_API_KEY")
     if not key or "pixabay" in VID_OFF:
         return []
-    url = (f"https://pixabay.com/api/videos/?key={key}&safesearch=true&per_page=30&q="
+    url = (f"https://pixabay.com/api/videos/?key={key}&safesearch=true&video_type=film&per_page=40&q="
            + urllib.parse.quote(query[:100]))
     try:
         hits = http(url, timeout=40).get("hits", [])
@@ -957,29 +1060,36 @@ def pixabay_search(query):
         return []
     out = []
     for v in hits:
-        if v.get("duration", 0) < 4 or looks_modern(v.get("tags")):
+        desc = v.get("tags") or ""
+        if v.get("type", "film") != "film" or v.get("duration", 0) < 4 or not clip_ok(desc, query):
             continue
         files = v.get("videos", {})
         for size in ("medium", "large", "small"):
             f = files.get(size) or {}
             if f.get("url") and 1200 <= (f.get("width") or 0) <= 2600:
-                out.append((f"pb{v['id']}", f["url"], f"Video by {v.get('user', 'Pixabay')} on Pixabay"))
+                out.append((f"pb{v['id']}", f["url"], f"Video by {v.get('user', 'Pixabay')} on Pixabay", desc))
                 break
     return out
 
 
 def stock_video(queries, used, alt=0):
-    """First unused clip for the queries; Pexels and Pixabay take turns so neither hits its limit."""
+    """Best-matching unused clip: for each query (most specific first) the clip whose name/tags share the
+    most words with it. A clip that shares no word with the query is never used - an archive photo or a
+    re-used matching clip is better than footage that has nothing to do with the line."""
     sources = [("px", pexels_search), ("pb", pixabay_search)]
     if alt % 2:
         sources.reverse()
     for q in [q for q in queries if q]:
+        best, score = None, 0
         for tag, fn in sources:
             if (tag, q) not in VID_CACHE:
                 VID_CACHE[(tag, q)] = fn(q)
             for c in VID_CACHE[(tag, q)]:
-                if c[0] not in used:
-                    return c
+                s = relevance(q, c[3])
+                if c[0] not in used and s > score:
+                    best, score = c, s
+        if best:
+            return best
     return None
 
 
@@ -1001,6 +1111,9 @@ def commons_video(query, used, dur, out):
         src = ii.get("url")
         if (not src or src in used or ii.get("width", 0) < 400
                 or not any(k in lic.lower() for k in OK_LICENSES) or "-nd" in lic.lower() or " nc" in lic.lower()):
+            continue
+        about = p.get("title", "") + " " + re.sub(r"<[^>]+>", " ", meta.get("ImageDescription", {}).get("value", ""))
+        if relevance(query, about) < 1 or BAD_CLIP.search(p.get("title", "")):
             continue
         length = float(ii.get("duration") or 0)
         start = length * 0.12 if length > dur * 2 else 0  # skip title cards at the start of old films
@@ -1475,39 +1588,117 @@ def ass_time(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
 
-def caption_file(items, path, w, h, size, margin):
-    """items: list of (start, end, text). Urdu right-to-left handled by libass."""
+def caption_font():
+    """Anton (bold condensed, free OFL font installed by the workflow) if present, else DejaVu Sans Bold."""
+    if LANG != "en":
+        return URDU_FONT_NAME, 1.0
+    try:
+        if "Anton" in subprocess.run(["fc-list", ":family"], capture_output=True, text=True).stdout:
+            return "Anton", 1.0
+    except Exception:
+        pass
+    return "DejaVu Sans", 0.8
+
+
+KEY_WORDS = {"dead", "death", "died", "die", "killed", "kill", "murder", "murdered", "secret", "secretly", "never",
+             "vanished", "missing", "disappeared", "poison", "poisoned", "truth", "nobody", "no", "curse", "cursed",
+             "blood", "fire", "burned", "body", "bodies", "mystery", "hidden", "lie", "lied", "cover", "crash",
+             "crashed", "exploded", "explosion", "drowned", "buried", "alive", "ghost", "terrifying", "shocking",
+             "impossible", "forgotten", "first", "last", "only", "everyone", "gone", "screams", "silence"}
+PLAIN_CAPS = {"I", "The", "A", "An", "But", "And", "So", "Then", "In", "On", "At", "It", "He", "She", "They",
+              "We", "You", "This", "That", "What", "Why", "How", "When", "Where", "Who", "Nobody", "No", "Yes"}
+
+
+def key_word(word, first):
+    w = re.sub(r"[^\w']", "", word)
+    if not w:
+        return False
+    if any(ch.isdigit() for ch in w) or w.lower() in KEY_WORDS:
+        return True
+    return w[:1].isupper() and not first and w not in PLAIN_CAPS  # names and places
+
+
+def caption_text(words):
+    """One caption chunk: pops in from 70% size, key words in yellow, ALL CAPS for English."""
+    out = []
+    for word, first in words:
+        shown = word.replace("{", "(").replace("}", ")").replace("\\", "")
+        shown = shown.upper() if LANG == "en" else shown
+        out.append("{\\c&H00FFFF&}" + shown + "{\\c&HFFFFFF&}" if key_word(word, first) else shown)
+    return "{\\fad(60,0)\\fscx70\\fscy70\\t(0,120,\\fscx100\\fscy100)}" + " ".join(out)
+
+
+def caption_file(items, path, w, h, size):
+    """items: (start, end, text, style). 'Cap' = big centred word-group captions, 'Top' = small headline."""
+    fname, k = caption_font()
+    size = int(size * k)
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
 PlayResY: {h}
 WrapStyle: 0
+ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Ur,{URDU_FONT_NAME},{size},&H00FFFFFF,&H0000D7FF,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,{max(3, size // 14)},2,2,70,70,{margin},1
-Style: Top,DejaVu Sans,{int(size * 0.9)},&H0000D7FF,&H00FFFFFF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,{max(3, size // 12)},2,8,60,60,{int(h * 0.09)},1
+Style: Cap,{fname},{size},&H00FFFFFF,&H0000FFFF,&H00000000,&H96000000,-1,0,0,0,100,100,1,0,1,{max(4, size // 14)},{max(2, size // 30)},5,{w // 12},{w // 12},0,1
+Style: Top,{fname},{int(size * 0.6)},&H0000D7FF,&H00FFFFFF,&H00000000,&H90000000,-1,0,0,0,100,100,1,0,1,{max(3, size // 18)},2,8,60,60,{int(h * 0.08)},1
 """
-    lines = [f"Dialogue: 0,{ass_time(s)},{ass_time(e)},{st},,0,0,0,,{t}" for s, e, t, st in items]
+    lines = [f"Dialogue: 0,{ass_time(s)},{ass_time(e)},{st},,0,0,0,,{t}" for s, e, t, st in items if e - s > 0.05]
     path.write_text(head + "\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
                     + "\n".join(lines) + "\n", encoding="utf-8")
 
 
-def chunk_captions(scenes, starts, durs, t0=0.0, t1=1e9, words=4):
+def word_groups(sentence, most=4):
+    """Splits a line into groups of 2-4 words that never run across a comma or a full stop."""
+    words = sentence.split()
+    clauses, cur = [], []
+    for n, wd in enumerate(words):
+        cur.append((wd, n == 0 or bool(re.search(r"[.!?]$", words[n - 1]))))
+        if re.search(r"[.,!?;:…]$", wd):
+            clauses.append(cur)
+            cur = []
+    if cur:
+        clauses.append(cur)
+    merged = []  # a one-word clause joins its neighbour
+    for c in clauses:
+        if merged and (len(c) == 1 or len(merged[-1]) == 1):
+            merged[-1] += c
+        else:
+            merged.append(c)
+    groups = []
+    for c in merged:  # even split: 5 words -> 3+2, 9 -> 3+3+3
+        k = -(-len(c) // most)
+        size, extra = divmod(len(c), k)
+        at = 0
+        for j in range(k):
+            n = size + (j < extra)
+            groups.append(c[at:at + n])
+            at += n
+    return groups
+
+
+def line_captions(sentence, start, dur, shift=0.0):
+    """Timed caption items for one spoken line (time shared by character count)."""
+    groups = word_groups(sentence)
+    speak = max(0.5, dur - 0.3)
+    tot = sum(len(" ".join(w for w, _ in g)) + 2 for g in groups) or 1
+    t, items = start, []
+    for g in groups:
+        d = speak * (len(" ".join(w for w, _ in g)) + 2) / tot
+        items.append((t - shift, t + d - shift, caption_text(g), "Cap"))
+        t += d
+    return items
+
+
+def chunk_captions(scenes, starts, durs, t0=0.0, t1=1e9):
     items = []
     for sc, st, du in zip(scenes, starts, durs):
         if st + du <= t0 or st >= t1:
             continue
-        ws = sc["ur"].split()
-        chunks = [ws[i:i + words] for i in range(0, len(ws), words)]
-        speak = max(0.5, du - 0.4)
-        tot = sum(len(" ".join(c)) + 2 for c in chunks)
-        t = st
-        for c in chunks:
-            d = speak * (len(" ".join(c)) + 2) / tot
-            if t >= t0 and t < t1:
-                items.append((t - t0, min(t + d, t1) - t0, " ".join(c), "Ur"))
-            t += d
+        for s, e, t, style in line_captions(sc["ur"], st, du):
+            if s >= t0 and s < t1:
+                items.append((s - t0, min(e, t1) - t0, t, style))
     return items
 
 
@@ -1545,51 +1736,128 @@ def render_long(story, work, offline):
     sfx = build_sfx(scenes, durs, work)
     dust = work / "dust.mp4"
     make_dust(dust)
+    ass = work / "long.ass"
+    caption_file(chunk_captions(scenes, starts, durs), ass, W, H, 92)
+    subs = str(ass).replace("\\", "/").replace(":", "\\:")
 
     log("Final long render...")
-    final = work / "long.mp4"
+    final, clean = work / "long.mp4", work / "long_clean.mp4"  # clean copy (no captions) is cut into Shorts
     fc = (f"[0:v]setpts=PTS-STARTPTS[base];[1:v]setpts=PTS-STARTPTS[d];"
           f"[base][d]blend=c0_expr='min(255,A+0.4*B)':c1_expr='A':c2_expr='A',"
-          f"vignette=PI/5,noise=alls=7:allf=t+u,fade=t=in:d=1,fade=t=out:st={max(0, total - 1.2):.2f}:d=1.2[v];"
+          f"vignette=PI/5,noise=alls=7:allf=t+u,fade=t=in:d=1,fade=t=out:st={max(0, total - 1.2):.2f}:d=1.2,"
+          f"split=2[v][vc0];[vc0]subtitles='{subs}'[vc];"
           "[2:a]highpass=f=70,acompressor=threshold=-18dB:ratio=3:attack=5:release=150,"
           "loudnorm=I=-15:TP=-1.5:LRA=9,aresample=44100,asplit=3[vo][sc][sc2];"
           "[3:a]volume=0.8[mu];[mu][sc]sidechaincompress=threshold=0.06:ratio=3:attack=40:release=700[duck];"
           "[4:a]volume=1.0[fx];[fx][sc2]sidechaincompress=threshold=0.08:ratio=2:attack=40:release=500[fxd];"
-          "[vo][duck][fxd]amix=inputs=3:duration=longest:normalize=0,alimiter=limit=0.95[a]")
+          "[vo][duck][fxd]amix=inputs=3:duration=longest:normalize=0,alimiter=limit=0.95,asplit=2[a][a2]")
+    enc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p",
+           "-c:a", "aac", "-b:a", "192k", "-r", FPS, "-t", f"{total:.2f}", "-movflags", "+faststart"]
     run(["ffmpeg", "-y", "-i", work / "visual.mp4", "-stream_loop", "-1", "-i", dust, "-i", work / "voice.wav",
-         "-i", music, "-i", sfx, "-filter_complex", fc, "-map", "[v]", "-map", "[a]",
-         "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p",
-         "-c:a", "aac", "-b:a", "192k", "-r", FPS, "-t", f"{total:.2f}", "-movflags", "+faststart", final])
-    return final, credits, starts, durs, total
+         "-i", music, "-i", sfx, "-filter_complex", fc,
+         "-map", "[vc]", "-map", "[a2]", *enc, final,
+         "-map", "[v]", "-map", "[a]", *enc, clean])
+    return final, clean, credits, starts, durs, total
 
 
-def render_short(story, long_video, work, starts, durs, total, which, title):
+def voice_line(line, wav, work):
+    """One extra spoken line for a Short (hook / loop) in the same voice as the video."""
+    raw = wav.with_suffix(".mp3")
+    engine = VOICE_USED.get("engine", "google")
+    if engine == "offline":
+        run(["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=f=180:r=24000", "-af", "volume=0.05",
+             "-t", f"{max(1.5, len(line) / 14):.2f}", raw])
+    elif engine == "gemini":
+        gemini_tts(speakable(line), raw)
+    else:
+        google_tts(speakable(line), raw)
+    run(["ffmpeg", "-y", "-i", raw, "-af", "highpass=f=70,acompressor=threshold=-18dB:ratio=3:attack=5:release=150,"
+         "loudnorm=I=-15:TP=-1.5,aresample=44100,apad=pad_dur=0.3", "-ac", "2", wav])
+    return duration(wav)
+
+
+def short_piece(sc, voice, dur, work, out, idx, hit=False):
+    """A 9:16 piece of a Short with its own voice line over a scene's footage, music bed and optional hit."""
+    v = work / f"{out.stem}_v.mp4"
+    if sc["kind"] == "video":
+        video_clip(sc["asset"], dur, v, 1080, 1920, idx=idx + 3)
+    else:
+        fr = work / f"{out.stem}.jpg"
+        still_frame(sc["asset"], fr, 1080, 1920)
+        animate_still(fr, dur, idx, v, 1080, 1920)
+    music = work / "music.wav"
+    inputs = ["-i", v, "-i", voice, "-ss", f"{(idx * 13.7) % 60:.1f}", "-stream_loop", "-1", "-i", music]
+    fc = (f"[1:a]apad,atrim=0:{dur:.3f}[vo];[2:a]atrim=0:{dur:.3f},volume=0.35,"
+          f"afade=t=in:d=0.3[mu];")
+    mix = "[vo][mu]"
+    if hit:
+        inputs += ["-i", work / "hit.wav"]
+        fc += "[3:a]volume=0.8[h];"
+        mix += "[h]"
+    fc += f"{mix}amix=inputs={mix.count('[')}:duration=first:normalize=0,alimiter=limit=0.95[a]"
+    run(["ffmpeg", "-y", *inputs, "-filter_complex", fc, "-map", "0:v", "-map", "[a]", "-t", f"{dur:.3f}",
+         "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2", out])
+    return out
+
+
+def render_short(story, clean_video, work, starts, durs, total, which, k):
+    """Hook line over the chapter's most dramatic shot -> the chapter cut from the documentary -> a loop
+    line that leads straight back into the hook when the Short replays. Big centred captions throughout."""
     scenes = story["scenes"]
     ch = which.get("chapter", 0)
-    idxs = [i for i, s in enumerate(scenes) if s["chapter"] == ch] or [0]
+    hook, loop, title = which.get("hook", ""), which.get("loop", ""), which.get("title") or story["title"]
+    idxs = [i for i, s in enumerate(scenes) if s["chapter"] == ch and not (hook and s.get("cold_open"))] or [0]
+    tag = f"short{k}"
+    parts, caps, t = [], [], 0.0
+    if hook:
+        hw = work / f"{tag}_hook.wav"
+        hd = voice_line(hook, hw, work)
+        drama = next((i for i in idxs if scenes[i].get("hit")), idxs[0])
+        parts.append(short_piece(scenes[drama], hw, hd, work, work / f"{tag}_hook.mp4", drama, hit=True))
+        caps += line_captions(hook, 0, hd)
+        t = hd
+    else:
+        caps.append((0, 3.0, title.upper(), "Top"))
+    loop_d, lw = 0.0, work / f"{tag}_loop.wav"
+    if loop:
+        loop_d = voice_line(loop, lw, work)
+    room = 58.5 - t - loop_d
     s0 = starts[idxs[0]]
     end = s0
     for i in range(idxs[0], len(scenes)):
-        if starts[i] + durs[i] - s0 > 57:
+        if starts[i] + durs[i] - s0 > room:
             break
         end = starts[i] + durs[i]
-    if end - s0 < 25:  # chapter too short: extend in time
-        end = min(total, s0 + 55)
+    if end - s0 < min(20, room):  # chapter too short: extend in time
+        end = min(total, s0 + room)
     dur = end - s0
-    tag = f"short{ch}"
-    caps = chunk_captions(scenes, starts, durs, s0, end, words=3)
-    caps.insert(0, (0, 3.2, title.upper(), "Top"))
-    caps.append((max(0, dur - 2.6), dur, "FULL STORY ON THE CHANNEL", "Top"))
+    body = work / f"{tag}_body.mp4"
+    run(["ffmpeg", "-y", "-ss", f"{s0:.2f}", "-i", clean_video, "-t", f"{dur:.2f}",
+         "-vf", "scale=-2:1920,crop=1080:1920,eq=contrast=1.05", "-c:v", "libx264", "-preset", "veryfast",
+         "-crf", "19", "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2", body])
+    parts.append(body)
+    caps += [(s + t, e + t, x, st) for s, e, x, st in chunk_captions(scenes, starts, durs, s0, end)]
+    t += dur
+    if loop:
+        last = max([i for i in range(len(scenes)) if starts[i] < end] or [idxs[0]])
+        parts.append(short_piece(scenes[last], lw, loop_d, work, work / f"{tag}_loop.mp4", last))
+        caps += line_captions(loop, t, loop_d)
+        t += loop_d
     ass = work / f"{tag}.ass"
-    caption_file(caps, ass, 1080, 1920, 96, 430)
-    out = work / f"{tag}.mp4"
+    caption_file(caps, ass, 1080, 1920, 118)
     subs = str(ass).replace("\\", "/").replace(":", "\\:")
-    vf = (f"scale=-2:1920,crop=1080:1920,eq=contrast=1.05,subtitles='{subs}',"
-          f"fade=t=out:st={max(0, dur - 0.5):.2f}:d=0.5,format=yuv420p")
-    run(["ffmpeg", "-y", "-ss", f"{s0:.2f}", "-i", long_video, "-t", f"{dur:.2f}", "-vf", vf,
+    ins, fc = [], ""
+    for n, p in enumerate(parts):
+        ins += ["-i", p]
+        fc += (f"[{n}:v]scale=1080:1920,setsar=1,fps={FPS},format=yuv420p[v{n}];"
+               f"[{n}:a]aresample=44100,aformat=channel_layouts=stereo[a{n}];")
+    fc += "".join(f"[v{n}][a{n}]" for n in range(len(parts)))
+    fc += f"concat=n={len(parts)}:v=1:a=1[cv][a];[cv]subtitles='{subs}',format=yuv420p[v]"
+    out = work / f"{tag}.mp4"
+    run(["ffmpeg", "-y", *ins, "-filter_complex", fc, "-map", "[v]", "-map", "[a]",
          "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-b:a", "160k",
-         "-af", f"afade=t=out:st={max(0, dur - 0.6):.2f}:d=0.6", "-movflags", "+faststart", out])
-    log(f"Short ready: {out.name} ({dur:.1f}s)")
+         "-movflags", "+faststart", out])
+    log(f"Short ready: {out.name} ({t:.1f}s, hook={'yes' if hook else 'no'}, loop={'yes' if loop else 'no'})")
     return out
 
 
@@ -1754,12 +2022,12 @@ def main():
 
     global SETTING
     SETTING = (story.get("setting") or "").strip()[:300]
-    long_v, credits, starts, durs, total = render_long(story, work, a.offline)
+    long_v, clean_v, credits, starts, durs, total = render_long(story, work, a.offline)
     thumb = thumbnail(story, work, a.offline)
     shorts = []
-    for k, sh in enumerate((story.get("shorts") or [{"chapter": 0}])[:SHORTS_COUNT]):
+    for k, sh in enumerate(story["shorts"][:SHORTS_COUNT]):
         title = sh.get("title") or story["title"]
-        shorts.append((render_short(story, long_v, work, starts, durs, total, sh, title), title))
+        shorts.append((render_short(story, clean_v, work, starts, durs, total, sh, k), title))
 
     frames = [grab(long_v, total * f, work / f"pv{n}.jpg") for n, f in enumerate((0.05, 0.3, 0.55, 0.8))]
     frames += [grab(s[0], 4, work / f"pvs{n}.jpg") for n, s in enumerate(shorts)] + [thumb]
