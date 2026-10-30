@@ -1,8 +1,8 @@
-OK   1_old_chirp_charon_slow.mp3  (34.296000 s)
-OK   2_chirp_charon_faster.mp3  (29.352000 s)
+OK   1_old_chirp_charon_slow.mp3  (34.416000 s)
+OK   2_chirp_charon_faster.mp3  (29.544000 s)
 FAIL 3_gemini_charon: HTTP 402 b'{\n  "error": {\n    "code": 402,\n    "message": "Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing. Learn more at https://ai.google.dev/gemini-api/docs/billing#prepay. ",\n    "status": "RESOURCE_EXHAUSTED"\n  }\n}\n'
 FAIL 4_gemini_orus: HTTP 402 b'{\n  "error": {\n    "code": 402,\n    "message": "Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing. Learn more at https://ai.google.dev/gemini-api/docs/billing#prepay. ",\n    "status": "RESOURCE_EXHAUSTED"\n  }\n}\n'
 FAIL 5_gemini_fenrir: HTTP 402 b'{\n  "error": {\n    "code": 402,\n    "message": "Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing. Learn more at https://ai.google.dev/gemini-api/docs/billing#prepay. ",\n    "status": "RESOURCE_EXHAUSTED"\n  }\n}\n'
-FAIL 6_gemini_pro_charon: HTTP 429 b'{\n  "error": {\n    "code": 429,\n    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota ex'
+FAIL 6_gemini_pro_charon: HTTP 402 b'{\n  "error": {\n    "code": 402,\n    "message": "Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing. Learn more at https://ai.google.dev/gemini-api/docs/billing#prepay. ",\n    "status": "RESOURCE_EXHAUSTED"\n  }\n}\n'
 MUSIC Darkest Child: 9551329 bytes, type application/octet-stream
 MIX  8_best_voice_with_music.mp3 from 2_chirp_charon_faster.mp3
