@@ -539,6 +539,9 @@ BAD_CLIP = re.compile(r"cartoon|animat|anime|green.?screen|chroma|blue.?screen|\
                       r"yoga|fitness|workout|cooking|food|coffee|smiling|happy|cheerful|business|"
                       r"lava|liquid|ink\b|paint|macro|kaleidoscope|fractal|tunnel|light.?leak|lens.?flare|"
                       r"wallpaper|screensaver|visuali[sz]er|psychedelic|colou?rful|rainbow|disco|led\b", re.I)
+# Archive films that carry a burned-in watermark / timecode from a reseller (e.g. "PF# ... PeriscopeFilm.com").
+BURNED_IN = re.compile(r"periscope|timecode|time code|watermark|preview copy|stock footage library|"
+                       r"criticalpast|british pathe|reuters|getty", re.I)
 STOP = {"old", "dark", "the", "a", "an", "of", "in", "on", "at", "and", "with", "night", "scene", "shot",
         "footage", "video", "film", "clip", "close", "up", "view", "slow", "motion", "vintage", "historic",
         "historical", "cinematic", "dramatic", "moody", "background"}
@@ -1143,7 +1146,9 @@ def commons_video(query, used, dur, out):
                 or not any(k in lic.lower() for k in OK_LICENSES) or "-nd" in lic.lower() or " nc" in lic.lower()):
             continue
         about = p.get("title", "") + " " + re.sub(r"<[^>]+>", " ", meta.get("ImageDescription", {}).get("value", ""))
-        if relevance(query, about) < 1 or BAD_CLIP.search(p.get("title", "")):
+        credit_txt = re.sub(r"<[^>]+>", " ", meta.get("Artist", {}).get("value", "") + " "
+                            + meta.get("Credit", {}).get("value", ""))
+        if relevance(query, about) < 1 or BAD_CLIP.search(p.get("title", "")) or BURNED_IN.search(about + credit_txt):
             continue
         length = float(ii.get("duration") or 0)
         start = length * 0.12 if length > dur * 2 else 0  # skip title cards at the start of old films
