@@ -63,11 +63,26 @@ jobs:
         run: python agent/studio.py ${{ inputs.upload == 'no' && '--no-upload' || '' }}
       - name: Save topic list and log
         if: always()
+        # Re-applies this run's data on top of the newest branch instead of rebasing, so a run that started
+        # from an older commit can't fail on the preview image: log lines from both sides are kept.
         run: |
           git config user.name "dark-history-agent"
           git config user.email "agent@users.noreply.github.com"
-          git add data/ || true
-          git diff --cached --quiet || (git commit -m "Log daily video" && git pull --rebase && git push)
+          rm -rf /tmp/run-data && cp -r data /tmp/run-data
+          for try in 1 2 3; do
+            git fetch -q origin "$GITHUB_REF_NAME"
+            git reset -q --hard "origin/$GITHUB_REF_NAME"
+            for f in topics_done.txt upload_log.csv; do
+              [ -f "/tmp/run-data/$f" ] || continue
+              touch "data/$f"
+              grep -vxF -f "data/$f" "/tmp/run-data/$f" >> "data/$f" || true
+            done
+            [ -d /tmp/run-data/previews ] && mkdir -p data/previews && cp /tmp/run-data/previews/* data/previews/
+            git add data/
+            git diff --cached --quiet && break
+            git commit -q -m "Log daily video" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break
+            sleep 10
+          done
       - name: Keep a copy of the videos (5 days)
         if: always()
         uses: actions/upload-artifact@v7
