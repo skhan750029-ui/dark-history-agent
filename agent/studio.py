@@ -55,7 +55,7 @@ LONG_MINUTES = float(os.getenv("LONG_MINUTES") or 11)
 SHORTS_COUNT = int(os.getenv("SHORTS_COUNT") or 2)
 LANG = (os.getenv("NARRATION_LANG") or "en").strip().lower()   # "en" = English narration, "ur" = Urdu
 TTS_VOICES = [v for v in [os.getenv("TTS_VOICE")] + (
-    ["en-US-Chirp3-HD-Charon", "en-US-Chirp3-HD-Orus", "en-US-Chirp3-HD-Fenrir", "en-US-Studio-Q"] if LANG == "en" else
+    ["en-US-Chirp3-HD-Enceladus", "en-US-Chirp3-HD-Charon", "en-US-Chirp3-HD-Iapetus", "en-US-Studio-Q"] if LANG == "en" else
     ["ur-IN-Chirp3-HD-Charon", "ur-IN-Chirp3-HD-Orus", "ur-IN-Chirp3-HD-Fenrir", "ur-IN-Wavenet-B"]) if v]
 W, H, FPS = 1920, 1080, 30
 
@@ -859,15 +859,25 @@ def gemini_tts(text, path):
     raise RuntimeError(f"Gemini voice: {last}")
 
 
+MARKUP = {"on": True}  # Chirp 3 HD pause tags; switched off for the run if the API refuses them
+
+
+def with_pauses(text):
+    """Short pause after every sentence (the slower, more cinematic read picked in the voice test)."""
+    t = text.replace("[", "(").replace("]", ")")
+    return re.sub(r"([.!?…])\s+(?=\S)", r"\1 [pause short] ", t)
+
+
 def google_tts(text, path):
     key = os.environ["GOOGLE_TTS_KEY"]
-    rate = float(os.getenv("TTS_RATE") or 0.95)  # a little slower = more cinematic
+    rate = float(os.getenv("TTS_RATE") or 0.97)  # picked from the voice samples: slow, but not dragging
     last = None
     for voice in list(TTS_VOICES):
-        body = {"input": {"text": text},
-                "voice": {"languageCode": "-".join(voice.split("-")[:2]), "name": voice},
-                "audioConfig": {"audioEncoding": "MP3", "speakingRate": rate, "sampleRateHertz": 24000}}
-        for attempt in range(4):
+        for attempt in range(5):
+            use_markup = MARKUP["on"] and "Chirp3" in voice
+            body = {"input": {"markup": with_pauses(text)} if use_markup else {"text": text},
+                    "voice": {"languageCode": "-".join(voice.split("-")[:2]), "name": voice},
+                    "audioConfig": {"audioEncoding": "MP3", "speakingRate": rate, "sampleRateHertz": 24000}}
             try:
                 r = http(f"https://texttospeech.googleapis.com/v1/text:synthesize?key={key}", body, timeout=180)
                 Path(path).write_bytes(base64.b64decode(r["audioContent"]))
@@ -878,6 +888,10 @@ def google_tts(text, path):
             except urllib.error.HTTPError as e:
                 body_txt = e.read()[:300]
                 last = f"{voice}: {e.code} {body_txt!r}"
+                if e.code == 400 and use_markup:
+                    MARKUP["on"] = False
+                    log("TTS pause tags not accepted - using plain text")
+                    continue
                 if e.code in (429, 500, 503):
                     time.sleep(min(MAX_WAIT, retry_after(e, body_txt) or 6 * (attempt + 1)))
                     continue
