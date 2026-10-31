@@ -1,8 +1,5 @@
-OK   1_old_chirp_charon_slow.mp3  (34.416000 s)
-OK   2_chirp_charon_faster.mp3  (29.544000 s)
-FAIL 3_gemini_charon: HTTP 402 b'{\n  "error": {\n    "code": 402,\n    "message": "Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing. Learn more at https://ai.google.dev/gemini-api/docs/billing#prepay. ",\n    "status": "RESOURCE_EXHAUSTED"\n  }\n}\n'
-FAIL 4_gemini_orus: HTTP 402 b'{\n  "error": {\n    "code": 402,\n    "message": "Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing. Learn more at https://ai.google.dev/gemini-api/docs/billing#prepay. ",\n    "status": "RESOURCE_EXHAUSTED"\n  }\n}\n'
-FAIL 5_gemini_fenrir: HTTP 402 b'{\n  "error": {\n    "code": 402,\n    "message": "Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing. Learn more at https://ai.google.dev/gemini-api/docs/billing#prepay. ",\n    "status": "RESOURCE_EXHAUSTED"\n  }\n}\n'
-FAIL 6_gemini_pro_charon: HTTP 402 b'{\n  "error": {\n    "code": 402,\n    "message": "Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing. Learn more at https://ai.google.dev/gemini-api/docs/billing#prepay. ",\n    "status": "RESOURCE_EXHAUSTED"\n  }\n}\n'
-MUSIC Darkest Child: 9551329 bytes, type application/octet-stream
-MIX  8_best_voice_with_music.mp3 from 2_chirp_charon_faster.mp3
+MUSIC "Darkest Child" Kevin MacLeod (incompetech.com), CC BY 4.0
+OK   1_en-US_Charon.mp3  voice=en-US-Chirp3-HD-Charon rate=0.92 pauses=markup  (19.2 s)
+OK   2_en-US_Algenib.mp3  voice=en-US-Chirp3-HD-Algenib rate=0.92 pauses=markup  (19.8 s)
+OK   3_en-US_Enceladus.mp3  voice=en-US-Chirp3-HD-Enceladus rate=0.92 pauses=markup  (21.3 s)
+OK   4_en-US_Iapetus.mp3  voice=en-US-Chirp3-HD-Iapetus rate=0.92 pauses=markup  (22.7 s)
