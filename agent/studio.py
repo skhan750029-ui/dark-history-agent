@@ -536,7 +536,9 @@ BAD_CLIP = re.compile(r"cartoon|animat|anime|green.?screen|chroma|blue.?screen|\
                       r"countdown|subscribe|banner|intro|outro|overlay|transition|template|mockup|screen\b|monitor|"
                       r"subway|metro|escalator|station|mall|airport|crowd|pedestrian|commuter|tourist|walking people|"
                       r"people walking|covid|corona|face mask|vr\b|robot|toy|kids?\b|children playing|wedding|"
-                      r"yoga|fitness|workout|cooking|food|coffee|smiling|happy|cheerful|business", re.I)
+                      r"yoga|fitness|workout|cooking|food|coffee|smiling|happy|cheerful|business|"
+                      r"lava|liquid|ink\b|paint|macro|kaleidoscope|fractal|tunnel|light.?leak|lens.?flare|"
+                      r"wallpaper|screensaver|visuali[sz]er|psychedelic|colou?rful|rainbow|disco|led\b", re.I)
 STOP = {"old", "dark", "the", "a", "an", "of", "in", "on", "at", "and", "with", "night", "scene", "shot",
         "footage", "video", "film", "clip", "close", "up", "view", "slow", "motion", "vintage", "historic",
         "historical", "cinematic", "dramatic", "moody", "background"}
@@ -732,7 +734,9 @@ Return ONLY JSON:
             r += "; its LAST scene is a cliffhanger line (e.g. 'But the real truth was still hidden...')"
         return r
 
-    def write_part(batch):
+    n_sc = max(6, round(words_per_ch / 26))  # AI models follow a scene count far better than a word count
+
+    def write_part(batch, note=""):
         """Narration for these chapters -> {chapter index: [scenes]} (missing chapters are simply absent)."""
         plan = "\n".join(f"{n + 1}. {chapters[i]['title']} - {chapters[i]['summary']}\n   ROLE: {role(i)}"
                          for n, i in enumerate(batch))
@@ -744,19 +748,20 @@ Story so far (last lines): {previous[-500:] or '(start of the video)'}
 FACTS (Wikipedia - follow these; if the chapter plan disagrees with them, the facts win):
 {facts or '(none - only use facts you are sure of)'}
 
-For EACH chapter write about {words_per_ch} words of narration in {LANG_RULE}
+LENGTH: EACH chapter has EXACTLY {n_sc} scenes, every scene 2 full sentences (about 26 words), so each
+chapter is about {words_per_ch} words. Do not shorten - the video must run {minutes:.0f} minutes. {note}
+Language: {LANG_RULE}
 Write it the way a great narrator TALKS, not like an essay: varied sentence length, contractions
 (it's, didn't), natural connectors (but, and then, so), a few direct questions to the viewer,
 "..." only for real dramatic pauses (max one per scene), "!" rarely. No headings, no lists.
 Follow each chapter's ROLE exactly. Every chapter names at least one exact person, one exact date
 (day, month, year) and one exact place from the FACTS - never "a man", "one day", "somewhere".
-Split each chapter into scenes of 1-2 sentences (8-14 seconds each when spoken).
 {VISUAL_RULES}
 {SFX_RULES}
 Return ONLY JSON with one entry per chapter, in order:
 {{"chapters": [{{"scenes": [{{"ur": "narration", "type": "video|archive|image", "query": "...", "query2": "...",
 "film": "", "archive": "...", "prompt": "...", "sfx": "...", "hit": false}}]}}]}}""",
-                        max_tokens=min(6000, 1200 + int(len(batch) * words_per_ch * 4.5)))
+                        max_tokens=min(6000, 1200 + int(len(batch) * words_per_ch * 5)))
         got = part.get("chapters")
         if not isinstance(got, list):  # answer came back as one flat {"scenes": [...]}
             got = [part] if len(batch) == 1 or "scenes" in part else []
@@ -775,6 +780,16 @@ Return ONLY JSON with one entry per chapter, in order:
                     got.update(write_part([i]))
                 except Exception as e:
                     log(f"Chapter {i + 1} failed again: {e}")
+            said = sum(len(sc["ur"].split()) for sc in got.get(i, []))
+            if i in got and said < 0.65 * words_per_ch:  # far too short: one rewrite of just this chapter
+                log(f"Chapter {i + 1} only {said} of ~{words_per_ch} words, asking for the full length")
+                try:
+                    longer = write_part([i], f"Your last version of this chapter had only {said} words - "
+                                             f"write the full {n_sc} scenes this time.")
+                    if sum(len(sc["ur"].split()) for sc in longer.get(i, [])) > said:
+                        got[i] = longer[i]
+                except Exception as e:
+                    log(f"Longer chapter {i + 1} failed, keeping the short one: {e}")
             for sc in got.get(i, []):
                 sc["chapter"] = i
                 scenes.append(sc)
@@ -1088,13 +1103,14 @@ def pixabay_search(query):
 
 def stock_video(queries, used, alt=0):
     """Best-matching unused clip: for each query (most specific first) the clip whose name/tags share the
-    most words with it. A clip that shares no word with the query is never used - an archive photo or a
-    re-used matching clip is better than footage that has nothing to do with the line."""
+    most words with it. A clip must share at least 2 of the query's words (or its only word) - an archive
+    photo or a re-used matching clip is better than footage that only shares one loose word with the line."""
     sources = [("px", pexels_search), ("pb", pixabay_search)]
     if alt % 2:
         sources.reverse()
     for q in [q for q in queries if q]:
-        best, score = None, 0
+        need = min(2, relevance(q, q))  # the query's own meaningful words, capped at 2
+        best, score = None, need - 1
         for tag, fn in sources:
             if (tag, q) not in VID_CACHE:
                 VID_CACHE[(tag, q)] = fn(q)
@@ -1102,7 +1118,7 @@ def stock_video(queries, used, alt=0):
                 s = relevance(q, c[3])
                 if c[0] not in used and s > score:
                     best, score = c, s
-        if best:
+        if best and score >= max(1, need):
             return best
     return None
 
@@ -1293,11 +1309,11 @@ def gather_visuals(scenes, work, offline, durs):
     if not offline and len(real) < max(5, 0.5 * len(scenes)):
         raise RuntimeError(f"Only {len(real)} real visuals found - refusing to make a low-quality video. "
                            "Add PEXELS_API_KEY / PIXABAY_API_KEY secrets.")
-    vids = [s for s in real if s["kind"] == "video"] or real
-    for i, sc in enumerate(scenes):  # fill gaps by re-using real footage (different part of the clip)
+    found = [i for i, s in enumerate(scenes) if s.get("asset")]
+    for i, sc in enumerate(scenes):  # fill gaps with the nearest matching footage, preferring the same chapter
         if not sc.get("asset"):
-            src = vids[(i * 7) % len(vids)]
-            sc["asset"], sc["kind"] = src["asset"], src["kind"]
+            j = min(found, key=lambda j: (scenes[j]["chapter"] != sc["chapter"], abs(j - i), j > i))
+            sc["asset"], sc["kind"] = scenes[j]["asset"], scenes[j]["kind"]
     return list(dict.fromkeys(credits))
 
 
@@ -1755,7 +1771,7 @@ def render_long(story, work, offline):
     dust = work / "dust.mp4"
     make_dust(dust)
     ass = work / "long.ass"
-    caption_file(chunk_captions(scenes, starts, durs), ass, W, H, 92)
+    caption_file(chunk_captions(scenes, starts, durs), ass, W, H, 118)
     subs = str(ass).replace("\\", "/").replace(":", "\\:")
 
     log("Final long render...")
@@ -1862,7 +1878,7 @@ def render_short(story, clean_video, work, starts, durs, total, which, k):
         caps += line_captions(loop, t, loop_d)
         t += loop_d
     ass = work / f"{tag}.ass"
-    caption_file(caps, ass, 1080, 1920, 118)
+    caption_file(caps, ass, 1080, 1920, 150)
     subs = str(ass).replace("\\", "/").replace(":", "\\:")
     ins, fc = [], ""
     for n, p in enumerate(parts):
