@@ -870,7 +870,7 @@ def with_pauses(text):
 
 def google_tts(text, path):
     key = os.environ["GOOGLE_TTS_KEY"]
-    rate = float(os.getenv("TTS_RATE") or 0.97)  # picked from the voice samples: slow, but not dragging
+    rate = float(os.getenv("TTS_RATE") or 1.0)  # Enceladus, picked from the voice samples, at normal pace
     last = None
     for voice in list(TTS_VOICES):
         for attempt in range(5):
@@ -1418,8 +1418,10 @@ def fetch_music(work, seed):
             if len(body) > 300_000:
                 p = work / "track.mp3"
                 p.write_bytes(body)
-                MUSIC_CREDIT.append(f'Music: "{name}" Kevin MacLeod (incompetech.com) - '
-                                    "Licensed under Creative Commons: By Attribution 4.0 License")
+                # the attribution incompetech.com asks for: title, artist, source, licence name + link
+                MUSIC_CREDIT.append(f'Music: "{name}" Kevin MacLeod (incompetech.com)\n'
+                                    "Licensed under Creative Commons: By Attribution 4.0 License\n"
+                                    "http://creativecommons.org/licenses/by/4.0/")
                 return p
         except Exception as e:
             log(f"Music download failed '{name}': {e}")
@@ -1430,6 +1432,8 @@ def pick_music(total, work, seed):
     tracks = sorted(MUSIC_DIR.glob("*.mp3")) + sorted(MUSIC_DIR.glob("*.wav")) if MUSIC_DIR.exists() else []
     out = work / "music.wav"
     t = random.Random(seed).choice(tracks) if tracks else fetch_music(work, seed)
+    if t and tracks and t.with_suffix(".txt").exists():  # own track: credit text kept next to it
+        MUSIC_CREDIT.append(t.with_suffix(".txt").read_text(encoding="utf-8").strip())
     if t:
         log(f"Music: {t.name} {MUSIC_CREDIT[-1:] }")
         run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", t, "-t", f"{total + 1:.2f}",
@@ -1976,12 +1980,20 @@ def chapter_lines(story, starts):
 
 
 def description(story, credits, extra=""):
+    """Music credit comes right after the intro so YouTube's 5000-character limit can only ever cut the
+    footage list, never the attribution the music licence requires."""
     tags = " ".join(story.get("hashtags", [])[:4])
-    cred = "\n".join(f"- {c}" for c in credits[:30])
-    return (f"{story['description'].strip()}\n\n{extra}"
+    head = (f"{story['description'].strip()}\n\n{extra}"
             f"Subscribe to {CHANNEL} for the stories history tried to forget.\n\n"
-            f"Narration: {'English' if LANG == 'en' else 'Urdu'}. Some scenes are AI-generated illustrations of historical events.\n"
-            f"Footage & images:\n{cred}\n" + "".join(c + "\n" for c in MUSIC_CREDIT + SFX_CREDITS[:15]) + f"\n{tags}")
+            f"Narration: {'English' if LANG == 'en' else 'Urdu'}. Some scenes are AI-generated illustrations of historical events.\n\n"
+            + "".join(c + "\n\n" for c in MUSIC_CREDIT))
+    tail = "".join(c + "\n" for c in SFX_CREDITS[:15]) + f"\n{tags}"
+    cred = ""
+    for c in credits[:30]:
+        if len(head) + len(cred) + len(tail) + len(c) + 40 > 4900:
+            break
+        cred += f"- {c}\n"
+    return head + (f"Footage & images:\n{cred}" if cred else "") + tail
 
 
 # =============================================================== MAIN
