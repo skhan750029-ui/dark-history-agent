@@ -1789,9 +1789,13 @@ def align_words(scenes, voice_wav):
     try:
         import difflib
         from faster_whisper import WhisperModel
+        import numpy as np
         model = WhisperModel(os.getenv("WHISPER_MODEL") or "base.en", device="cpu", compute_type="int8")
-        segs, _ = model.transcribe(str(voice_wav), language="en", word_timestamps=True, beam_size=1,
-                                   condition_on_previous_text=False)
+        # decode with ffmpeg ourselves (16 kHz mono float) - faster-whisper's own PyAV decoder breaks on new PyAV
+        pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(voice_wav), "-f", "f32le", "-ac", "1", "-ar", "16000",
+                              "-"], capture_output=True, check=True).stdout
+        segs, _ = model.transcribe(np.frombuffer(pcm, np.float32), language="en", word_timestamps=True,
+                                   beam_size=1, condition_on_previous_text=False)
         heard = [(norm_word(w.word), w.start, w.end) for s in segs for w in (s.words or []) if norm_word(w.word)]
     except Exception as e:
         log(f"Caption sync off ({str(e)[:120]}) - using estimated timing")
