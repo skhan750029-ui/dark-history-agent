@@ -338,10 +338,10 @@ def ask_json(prompt, keys=(), max_tokens=4000):
 
 # ---------------------------------------------------------------- trending topics (free public data)
 
-DARK = re.compile(r"disaster|massacre|murder|killing|killer|myster|disappear|vanish|curse|ghost|haunt|shipwreck|"
+DARK = re.compile(r"disaster|murder|killing|killer|myster|disappear|vanish|curse|ghost|haunt|shipwreck|"
                   r"sinking|sank|wreck|explosion|plague|epidemic|famine|execut|assassinat|expedition|cannibal|"
                   r"cult\b|tragedy|catastroph|collapse|poison|witch|hoax|unsolved|unexplained|kidnap|siege|mutiny|"
-                  r"abandoned|experiment|crash|flood|eruption|stampede|genocide|atrocit|lost |prison|asylum|"
+                  r"abandoned|experiment|crash|flood|eruption|stampede|lost |prison|asylum|"
                   r"tomb|mummy|pirate|serial|hanged|burned|buried|torture|inquisition", re.I)
 NOT_STORY = re.compile(r"footballer|cricketer|singer|rapper|actor|actress|\bfilm\b|television|tv series|season|"
                        r"album|song|video game|election|politician|company|tournament|league|\bcup\b|\bband\b|"
@@ -351,7 +351,13 @@ OLD = re.compile(r"\b(1[0-9]{3}|200[0-5])\b|\bBC\b|century|ancient|medieval|hist
 SENSITIVE = re.compile(r"israel|palestin|gaza|west bank|zionis|hamas|hezbollah|nakba|ukrain|crimea|chechn|kashmir|"
                        r"partition of india|armenian|kurd|rohingya|uyghur|tibet|taiwan|korean war|troubles|\bIRA\b|"
                        r"holocaust|genocide|ethnic cleansing|pogrom|terror|jihad|isis|taliban|al-qaeda|sectarian|"
-                       r"apartheid|lynch|slave", re.I)
+                       r"apartheid|lynch|slave|"
+                       # racial, religious or political violence: hurts ad revenue and isn't the channel's style
+                       r"massacre|atrocit|race riot|racial|racist|\bmob\b|ku klux|\bkkk\b|klan|white supremac|"
+                       r"neo-?nazi|civil rights|segregat|\briots?\b|uprising|insurrection|coup\b|revolution|"
+                       r"mass shooting|shooting|gunman|school shooting|hostage|bombing campaign|"
+                       r"religious|sectarian|church burning|mosque|synagogue|temple attack|"
+                       r"election|politic|communis|fascis|militia|paramilitary|death squad", re.I)
 
 
 def yt_trending(limit=15):
@@ -668,6 +674,9 @@ It must NOT be any of these already-used topics:
 {avoid}
 Never invent facts; mark legends as legends. Respect victims: no gore for shock, no glorifying violence.
 Skip stories about living people and stories tied to wars or political conflicts that are still going on.
+Also skip massacres, race riots, mass shootings and any racial, religious or political violence.
+Best fits: unsolved mysteries, disappearances, ghost ships, lost expeditions, strange deaths,
+disasters and accidents, curses and legends, bizarre experiments, forgotten crimes, abandoned places.
 
 Plan a {minutes:.0f}-minute documentary with {n_ch} chapters, built like the best retention documentaries:
 - COLD OPEN: the very first line is a jolt - a secret or a shocking question with a real name, year or
