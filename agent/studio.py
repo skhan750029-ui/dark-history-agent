@@ -2114,6 +2114,61 @@ def yt_upload(tok, video, title, desc, tags, publish_at=None, thumb=None):
     return vid, res["status"].get("privacyStatus")
 
 
+def srt_time(t):
+    ms = int(round(max(0.0, t) * 1000))
+    return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+
+
+def make_srt(scenes, starts, durs, path):
+    """Normal subtitle file (sentence pieces of up to 9 words, ordinary case) from the same timing as the
+    burned-in captions, for YouTube's CC track: searchable text and no wrong auto-captions."""
+    cues = []
+    for n, (sc, st, du) in enumerate(zip(scenes, starts, durs)):
+        words = sc["ur"].split()
+        times = WORD_TIMES.get(n)
+        times = times if times and len(times) == len(words) else None
+        chunk, total = [], sum(len(w) + 1 for w in words) or 1
+        for k, w in enumerate(words):
+            chunk.append(k)
+            left = len(words) - k - 1  # never leave 1-2 words alone on the last line
+            if (k == len(words) - 1 or (left > 2 and (len(chunk) >= 9 or
+                                                     (len(chunk) >= 4 and re.search(r"[.,!?;:…]$", w))))):
+                if times:
+                    a, b = times[chunk[0]][0], times[chunk[-1]][1]
+                else:  # no word timing: share the scene by character count
+                    before = sum(len(x) + 1 for x in words[:chunk[0]])
+                    upto = before + sum(len(words[j]) + 1 for j in chunk)
+                    a, b = st + du * before / total, st + du * upto / total
+                cues.append([max(a, st), min(max(b, a + 0.6), st + du), " ".join(words[j] for j in chunk)])
+                chunk = []
+    for c, nxt in zip(cues, cues[1:]):  # never overlap the next line
+        c[1] = min(c[1], nxt[0])
+    path.write_text("".join(f"{i}\n{srt_time(a)} --> {srt_time(b)}\n{t}\n\n" for i, (a, b, t) in
+                            enumerate(cues, 1) if b > a), encoding="utf-8")
+    return path
+
+
+def yt_captions(tok, vid, srt):
+    """Adds our subtitles as the video's English CC track (needs the youtube.force-ssl scope on the
+    refresh token; 400 quota units)."""
+    meta = json.dumps({"snippet": {"videoId": vid, "language": "en", "name": "English", "isDraft": False}})
+    bnd = "dhcaptions" + str(random.randint(10 ** 8, 10 ** 9))
+    body = (f"--{bnd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{meta}\r\n"
+            f"--{bnd}\r\nContent-Type: application/x-subrip\r\n\r\n").encode() + Path(srt).read_bytes() + \
+        f"\r\n--{bnd}--\r\n".encode()
+    try:
+        http("https://www.googleapis.com/upload/youtube/v3/captions?uploadType=multipart&part=snippet", body,
+             headers={"Authorization": f"Bearer {tok}", "Content-Type": f"multipart/related; boundary={bnd}"})
+        log("Subtitles (CC) uploaded")
+    except urllib.error.HTTPError as e:
+        msg = e.read()[:200]
+        hint = (" - the YouTube refresh token needs the youtube.force-ssl scope for this"
+                if e.code in (401, 403) else "")
+        log(f"Subtitles not uploaded: HTTP {e.code} {msg!r}{hint}")
+    except Exception as e:
+        log(f"Subtitles not uploaded: {e}")
+
+
 def chapter_lines(story, starts):
     seen, out = set(), []
     for sc, st in zip(story["scenes"], starts):
@@ -2197,6 +2252,7 @@ def main():
     global SETTING
     SETTING = (story.get("setting") or "").strip()[:300]
     long_v, clean_v, credits, starts, durs, total = render_long(story, work, a.offline)
+    srt = make_srt(story["scenes"], starts, durs, work / "captions.srt")
     thumb = thumbnail(story, work, a.offline)
     shorts = []
     for k, sh in enumerate(story["shorts"][:SHORTS_COUNT]):
@@ -2214,6 +2270,8 @@ def main():
         vid, st = yt_upload(tok, long_v, story["title"], description(story, credits, chapter_lines(story, starts)),
                             story.get("tags", []), thumb=thumb)
         results.append(("long", story["title"], st, vid))
+        if (os.getenv("UPLOAD_CAPTIONS") or "on") != "off":
+            yt_captions(tok, vid, srt)
         now = dt.datetime.now(dt.timezone.utc)
         for k, (sv, stitle) in enumerate(shorts):
             when = (now + dt.timedelta(hours=4 + 5 * k)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -2232,7 +2290,7 @@ def main():
         with open(DATA / "upload_log.csv", "a", encoding="utf-8") as f:
             for kind, t, st, vid in results:
                 f.write(f"{dt.datetime.now(dt.timezone.utc).isoformat()},{kind},\"{t}\",{st},https://youtu.be/{vid}\n")
-    keep = {"long.mp4", "thumb.jpg", "story.json"} | {s[0].name for s in shorts}
+    keep = {"long.mp4", "thumb.jpg", "story.json", "captions.srt"} | {s[0].name for s in shorts}
     for p in work.iterdir():
         if p.name not in keep:
             p.unlink(missing_ok=True)
