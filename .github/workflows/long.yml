@@ -31,11 +31,17 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-base-en-v1
       - name: Install tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg fonts-dejavu-core fonts-noto-core
           pip install -q pillow
+          # free offline speech recognition: puts every caption exactly where the word is spoken
+          pip install -q faster-whisper || echo "faster-whisper not installed - captions use estimated timing"
           # Anton: free bold caption font (SIL Open Font License) from the Google Fonts repository
           mkdir -p ~/.local/share/fonts
           curl -fsSL -o ~/.local/share/fonts/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf || echo "Anton font not downloaded - using DejaVu Sans"

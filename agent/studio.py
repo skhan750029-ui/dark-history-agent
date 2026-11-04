@@ -617,6 +617,24 @@ def normalize_outline(o, n_ch=5):
     o["shorts"] = shorts or [{"chapter": c, "title": fixed[c]["title"], "hook": "", "loop": ""}
                              for c in sorted({0, min(2, len(fixed) - 1)})]
     o["hook"] = text(o.get("hook"))
+    scored = []
+    for h in o.get("hooks") if isinstance(o.get("hooks"), list) else []:
+        try:
+            if isinstance(h, dict) and text(h.get("text")):
+                scored.append((float(h.get("score") or 0), text(h.get("text"))))
+        except (TypeError, ValueError):
+            continue
+    if scored:  # the best-scoring cold open wins, even if the AI put a weaker one in "hook"
+        best = max(scored)
+        if best[0] >= 7 or not o["hook"]:
+            o["hook"] = best[1]
+    if len(o["title"]) > 60:  # keep it readable on a phone: cut at a word boundary
+        cut = o["title"][:60].rsplit(" ", 1)[0].rstrip(" :,-–")
+        o["title"] = cut if len(cut) >= 30 else o["title"][:60]
+    title_words = {norm_word(w) for w in o["title"].split()}
+    thumb = [w for w in o["thumbnail_text"].split() if norm_word(w) not in title_words]
+    if len(thumb) >= 2 and len(thumb) < len(o["thumbnail_text"].split()):
+        o["thumbnail_text"] = " ".join(thumb)  # thumbnail text must add curiosity, not repeat the title
     o["hook_query"] = text(o.get("hook_query"), "dark storm night")
     o["hook_film"] = text(o.get("hook_film"))
     try:
@@ -686,27 +704,35 @@ Plan a {minutes:.0f}-minute documentary with {n_ch} chapters, built like the bes
 - Every chapter ends on a cliffhanger; earlier chapters only hint at the answer.
 - The BIGGEST reveal comes in chapter {max(1, int(n_ch * 0.75 + 0.5) - 1) + 1} of {n_ch} (70-80% into the video).
 - Every chapter summary names exact people, exact dates and exact places - nothing vague.
+HOOKS: write 5 cold-open candidates, one of each type: curiosity gap, bold claim, story open (drop into
+the scene mid-action), shock fact, direct challenge ("You have heard this story wrong"). Score each 0-10,
+2 points each for: understood in one listen (under 20 words) / creates a question or tension / specific
+(name, date, place) / matches the title + thumbnail promise / true and verifiable. Use the best as "hook";
+if none scores 7+, rewrite until one does.
+TITLE + THUMBNAIL are ONE pair: title under 60 characters (fits on a phone); thumbnail text 2-4 words that
+do NOT repeat any title word and add a second piece of curiosity; together one clear promise the video keeps.
 Return ONLY JSON:
 {{"topic": "short English name of the story",
-  "hook": "the cold open line (rules above)",
+  "hooks": [{{"type": "curiosity gap", "text": "...", "score": 8}}, "... 5 in total"],
+  "hook": "the best-scoring hook (rules above)",
   "hook_query": "2-4 English words for the most dramatic stock-footage shot to open the video",
   "hook_film": "2-4 English words for real historical film of this event on Wikimedia Commons, or empty",
   "question": "the central question of the video",
   "wikipedia": "exact title of the English Wikipedia article about this story",
   "trend_reason": "which trending signal this matches and why it will get views",
-  "title": "English YouTube title, max 70 chars, curiosity + truthful, may use one CAPS word",
-  "thumbnail_text": "2-4 English words, punchy",
+  "title": "English YouTube title, under 60 chars, curiosity + truthful, may use one CAPS word",
+  "thumbnail_text": "2-4 English words, none of them in the title",
   "setting": "visual setting for all pictures: year/era, place, period details",
   "thumbnail_prompt": "English prompt for a dramatic photorealistic cinematic thumbnail image of the story's key moment, no text",
-  "description": "English description: 2 short hook paragraphs + 'Sources:' with 2-4 real sources",
-  "tags": ["12-15 English SEO tags"],
-  "hashtags": ["#history", "#mystery", "..."],
+  "description": "English description: the FIRST 2 LINES carry the hook and the main search keyword (they show in search results), then a 3-5 line summary, then 'Sources:' with 2-4 real sources",
+  "tags": ["8-15 English SEO tags mixing broad (dark history, unsolved mystery) and specific (event, place, year)"],
+  "hashtags": ["#darkhistory", "#mystery", "one specific hashtag - 3 in total"],
   "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells, with exact names, dates, places"}}],
   "shorts": [{{"chapter": 0, "title": "English Shorts title max 60 chars",
               "hook": "first line of the Short: a shocking question or secret from this chapter, max 15 words",
               "loop": "last line of the Short, max 15 words, that flows straight back into the hook when the Short replays (e.g. ends with '...and that is exactly why' or a half-sentence the hook completes)"}},
              {{"chapter": 2, "title": "...", "hook": "...", "loop": "..."}}]
-}}""", keys=("chapters",), max_tokens=3500)
+}}""", keys=("chapters",), max_tokens=4000)
     outline = normalize_outline(outline, n_ch)
     if is_used(outline["topic"], done):
         REJECTED.append(outline["topic"])
@@ -1284,6 +1310,14 @@ def gather_visuals(scenes, work, offline, durs):
                             used_vid.add(got[0])
                             credits.append(got[2])
                             sc["asset"], sc["kind"] = p, "video"
+                            # long scene: a second matching shot halfway, so the picture changes every ~4-6 s
+                            two = durs[i] > 7.5 and stock_video([sc.get("query2"), q], used_vid, i + 1)
+                            if two:
+                                p2 = work / f"v_{i:03d}b.mp4"
+                                download(two[1], p2)
+                                used_vid.add(two[0])
+                                credits.append(two[2])
+                                sc["asset2"] = p2
                     elif kind == "image" and sc.get("prompt"):
                         p = work / f"i_{i:03d}.jpg"
                         if ai_image(sc["prompt"], p, 1000 + i):
@@ -1739,12 +1773,87 @@ def line_captions(sentence, start, dur, shift=0.0):
     return items
 
 
+WORD_TIMES = {}  # scene index -> [(start, end)] for every word of its text, heard in the real narration
+
+
+def norm_word(w):
+    return re.sub(r"[^a-z0-9]", "", w.lower())
+
+
+def align_words(scenes, voice_wav):
+    """Finds when every word is actually spoken (free offline speech recognition, faster-whisper), so the
+    captions follow the voice instead of an estimate. Any problem -> captions fall back to the estimate."""
+    WORD_TIMES.clear()
+    if LANG != "en" or (os.getenv("CAPTION_SYNC") or "on") == "off":
+        return
+    try:
+        import difflib
+        from faster_whisper import WhisperModel
+        import numpy as np
+        model = WhisperModel(os.getenv("WHISPER_MODEL") or "base.en", device="cpu", compute_type="int8")
+        # decode with ffmpeg ourselves (16 kHz mono float) - faster-whisper's own PyAV decoder breaks on new PyAV
+        pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(voice_wav), "-f", "f32le", "-ac", "1", "-ar", "16000",
+                              "-"], capture_output=True, check=True).stdout
+        segs, _ = model.transcribe(np.frombuffer(pcm, np.float32), language="en", word_timestamps=True,
+                                   beam_size=1, condition_on_previous_text=False)
+        heard = [(norm_word(w.word), w.start, w.end) for s in segs for w in (s.words or []) if norm_word(w.word)]
+    except Exception as e:
+        log(f"Caption sync off ({str(e)[:120]}) - using estimated timing")
+        return
+    ours = [(i, norm_word(wd)) for i, sc in enumerate(scenes) for wd in sc["ur"].split()]
+    times = [None] * len(ours)
+    sm = difflib.SequenceMatcher(None, [w for _, w in ours], [h[0] for h in heard], autojunk=False)
+    for a, b, n in sm.get_matching_blocks():
+        for j in range(n):
+            times[a + j] = (heard[b + j][1], heard[b + j][2])
+    hit = sum(t is not None for t in times)
+    if hit < 0.5 * len(ours):
+        log(f"Caption sync: only {hit}/{len(ours)} words recognised - using estimated timing")
+        return
+    known = [k for k, t in enumerate(times) if t]
+    for k, t in enumerate(times):  # words not recognised (numbers, names): spread between their neighbours
+        if t:
+            continue
+        p = max((j for j in known if j < k), default=None)
+        q = min((j for j in known if j > k), default=None)
+        first = p + 1 if p is not None else 0
+        gap = (q if q is not None else len(times)) - first  # unknown words in this run
+        a = times[p][1] if p is not None else max(0.0, times[q][0] - 0.4 * gap)
+        b = times[q][0] if q is not None else a + 0.4 * gap
+        pos = k - first
+        step = max(0.0, b - a) / max(1, gap)
+        times[k] = (a + pos * step, a + (pos + 1) * step)
+    for (i, _), t in zip(ours, times):
+        WORD_TIMES.setdefault(i, []).append(t)
+    log(f"Caption sync: {hit}/{len(ours)} words matched to the voice")
+
+
+def timed_captions(sentence, times, lo, hi):
+    """Caption groups that appear exactly when their first word is spoken."""
+    groups, out, k = word_groups(sentence), [], 0
+    firsts = []
+    for g in groups:
+        firsts.append(times[k][0])
+        k += len(g)
+    k = 0
+    for gi, g in enumerate(groups):
+        s = min(max(lo, times[k][0]), hi)
+        e = firsts[gi + 1] if gi + 1 < len(groups) else times[k + len(g) - 1][1] + 0.25
+        e = min(hi, max(e, s + 0.3))
+        out.append((s, e, caption_text(g), "Cap"))
+        k += len(g)
+    return out
+
+
 def chunk_captions(scenes, starts, durs, t0=0.0, t1=1e9):
     items = []
-    for sc, st, du in zip(scenes, starts, durs):
+    for n, (sc, st, du) in enumerate(zip(scenes, starts, durs)):
         if st + du <= t0 or st >= t1:
             continue
-        for s, e, t, style in line_captions(sc["ur"], st, du):
+        timed = WORD_TIMES.get(n)
+        lines = (timed_captions(sc["ur"], timed, st, st + du) if timed and len(timed) == len(sc["ur"].split())
+                 else line_captions(sc["ur"], st, du))
+        for s, e, t, style in lines:
             if s >= t0 and s < t1:
                 items.append((s - t0, min(e, t1) - t0, t, style))
     return items
@@ -1756,6 +1865,8 @@ def render_long(story, work, offline):
     durs = narrate(scenes, work, offline)
     total = sum(durs)
     log(f"Narration: {total / 60:.1f} min")
+    if not offline:
+        align_words(scenes, work / "voice.wav")
 
     log("Visuals...")
     credits = gather_visuals(scenes, work, offline, durs)
@@ -1765,7 +1876,14 @@ def render_long(story, work, offline):
     for i, (sc, du) in enumerate(zip(scenes, durs)):
         clip = work / f"c_{i:03d}.mp4"
         if sc["kind"] == "video":
-            video_clip(sc["asset"], du, clip, idx=i)
+            if sc.get("asset2"):  # two shots in one scene: cut halfway (frame-exact so the timing stays)
+                half = round(du / 2 * FPS) / FPS
+                video_clip(sc["asset"], half, clip, idx=i)
+                clips.append(clip)
+                clip = work / f"c_{i:03d}b.mp4"
+                video_clip(sc["asset2"], du - half, clip, idx=i + 1)
+            else:
+                video_clip(sc["asset"], du, clip, idx=i)
         else:
             fr = work / f"f_{i:03d}.jpg"
             still_frame(sc["asset"], fr, W, H)
@@ -2012,7 +2130,7 @@ def chapter_lines(story, starts):
 def description(story, credits, extra=""):
     """Music credit comes right after the intro so YouTube's 5000-character limit can only ever cut the
     footage list, never the attribution the music licence requires."""
-    tags = " ".join(story.get("hashtags", [])[:4])
+    tags = " ".join(story.get("hashtags", [])[:3])
     head = (f"{story['description'].strip()}\n\n{extra}"
             f"Subscribe to {CHANNEL} for the stories history tried to forget.\n\n"
             f"Narration: {'English' if LANG == 'en' else 'Urdu'}. Some scenes are AI-generated illustrations of historical events.\n\n"
