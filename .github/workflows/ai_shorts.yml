@@ -1,9 +1,9 @@
-name: Everyday AI Easy - 3 Shorts
+name: Everyday AI Easy - 2 Shorts
 
 # Separate channel and separate bot (agent/ai_shorts.py). Dark History's workflow is untouched.
 on:
   schedule:
-    - cron: "41 8 * * *"   # ~08:41 UTC (Dark History runs ~15:13 UTC); Shorts publish now, +4 h, +8 h
+    - cron: "41 8 * * *"   # ~08:41 UTC (Dark History runs ~15:13 UTC); Shorts publish now and +4 h
   workflow_dispatch:
     inputs:
       privacy:
@@ -46,7 +46,7 @@ jobs:
           mkdir -p ~/.local/share/fonts
           curl -fsSL -o ~/.local/share/fonts/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf || echo "Anton font not downloaded"
           fc-cache -f >/dev/null
-      - name: Make and upload 3 Shorts
+      - name: Make and upload Shorts
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -55,9 +55,11 @@ jobs:
           GOOGLE_TTS_KEY: ${{ secrets.AI_GOOGLE_TTS_KEY || secrets.GOOGLE_TTS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          AI_YT_CLIENT_ID: ${{ secrets.AI_YT_CLIENT_ID }}
-          AI_YT_CLIENT_SECRET: ${{ secrets.AI_YT_CLIENT_SECRET }}
+          # same Google Cloud project / OAuth client as Dark History, only the channel's refresh token differs
+          AI_YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          AI_YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           AI_YT_REFRESH_TOKEN: ${{ secrets.AI_YT_REFRESH_TOKEN }}
+          AI_SHORTS_COUNT: ${{ vars.AI_SHORTS_COUNT || '2' }}  # 2 a day keeps the shared daily YouTube quota safe
           CHANNEL_NAME: ${{ vars.AI_CHANNEL_NAME || 'Everyday AI Easy' }}
           PRIVACY: ${{ inputs.privacy || vars.AI_PRIVACY || 'public' }}
           AI_TTS_VOICE: ${{ vars.AI_TTS_VOICE }}

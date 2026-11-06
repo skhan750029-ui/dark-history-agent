@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-Everyday AI Easy - 3 YouTube Shorts a day about new AI tools and AI news, in simple English.
+Everyday AI Easy - 2 YouTube Shorts a day about new AI tools and AI news, in simple English.
 
 Separate channel, separate bot: it only *uses* the tested building blocks of studio.py (free AI
 writers with 429 backoff, Google TTS with the free edge-tts backup, word-synced captions, stock clip
 search) and never changes the Dark History bot. Its own data lives in data/ai/.
 
 Pipeline: official AI news feeds (OpenAI, Google, DeepMind, NVIDIA, Hugging Face, Apple, AWS,
-Mistral) ranked by what people are talking about on Hacker News -> the 3 most useful stories for
+Mistral) ranked by what people are talking about on Hacker News -> the 2 most useful stories for
 ordinary people -> facts ONLY from the official post -> 45-55 s script (hook first, no hype, loop
 ending) -> bright friendly voice -> modern stock clips (vertical) -> big centred captions -> upload
-to the Everyday AI Easy channel (its own Google Cloud project, so its YouTube quota is separate).
+to the Everyday AI Easy channel. It uses Dark History's Google Cloud project / OAuth client
+(YT_CLIENT_ID / YT_CLIENT_SECRET) with the new channel's own refresh token (AI_YT_REFRESH_TOKEN), so
+both channels share one daily YouTube quota - hence 2 Shorts a day here.
 
 Secrets: GROQ_API_KEY (+ optional OPENROUTER_API_KEY / CF_*), GOOGLE_TTS_KEY (optional, edge-tts
-otherwise), PEXELS_API_KEY / PIXABAY_API_KEY, AI_YT_CLIENT_ID / AI_YT_CLIENT_SECRET / AI_YT_REFRESH_TOKEN
-Usage:  python agent/ai_shorts.py [--no-upload] [--count 3]
+otherwise), PEXELS_API_KEY / PIXABAY_API_KEY, YT_CLIENT_ID / YT_CLIENT_SECRET, AI_YT_REFRESH_TOKEN
+Usage:  python agent/ai_shorts.py [--no-upload] [--count 2]
 """
 import argparse
 import datetime as dt
@@ -455,7 +457,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
     ap.add_argument("--offline", action="store_true")
-    ap.add_argument("--count", type=int, default=int(os.getenv("AI_SHORTS_COUNT") or 3))
+    ap.add_argument("--count", type=int, default=int(os.getenv("AI_SHORTS_COUNT") or 2))
     a = ap.parse_args()
     DATA.mkdir(parents=True, exist_ok=True)
     done_f = DATA / "topics_done.txt"
