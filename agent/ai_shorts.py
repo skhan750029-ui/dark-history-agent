@@ -223,6 +223,8 @@ Return ONLY JSON:
     scenes = []
     for sc in s.get("scenes") or []:
         t = base.text(sc.get("text") if isinstance(sc, dict) else sc)
+        # spoken dashes/bullets would show up as "- word" in the captions; a comma gives the same pause
+        t = re.sub(r"^\s*[-–—•*]+\s*", "", re.sub(r"\s*,?\s+[-–—]+\s+", ", ", t)).strip()
         if t:
             scenes.append({"ur": t, "chapter": 0, "query": base.text(sc.get("query") if isinstance(sc, dict) else "",
                                                                        "person using laptop")})
@@ -423,9 +425,15 @@ def yt_upload(tok, video, title, desc, tags, publish_at=None):
                                           "User-Agent": base.UA})
     with urllib.request.urlopen(req, timeout=3600) as r:
         res = json.loads(r.read())
-    log(f"Uploaded https://youtu.be/{res['id']} ({res['status'].get('privacyStatus')}"
+    chan = (res.get("snippet") or {}).get("channelTitle") or "?"
+    log(f"Uploaded https://youtu.be/{res['id']} to channel '{chan}' ({res['status'].get('privacyStatus')}"
         f"{', publishes ' + publish_at if publish_at else ''})")
-    return res["id"], res["status"].get("privacyStatus")
+    return res["id"], res["status"].get("privacyStatus"), chan
+
+
+def same_channel(a, b):
+    k = lambda s: re.sub(r"[^a-z0-9]", "", (s or "").lower())
+    return k(a) == k(b)
 
 
 def description(s, credits, mcredit):
@@ -488,7 +496,7 @@ def main():
         frames.append(base.grab(video, min(20.0, duration(video) / 2), video.with_name("pv_b.jpg")))
     preview(frames, DATA / "previews" / "latest.jpg")
 
-    results = []
+    results, wrong_channel = [], None
     missing = [k for k in ("AI_YT_CLIENT_ID", "AI_YT_CLIENT_SECRET", "AI_YT_REFRESH_TOKEN") if not os.getenv(k)]
     if missing and not (a.no_upload or a.offline):
         log(f"Not uploading: add the GitHub secrets {', '.join(missing)} for the Everyday AI Easy channel "
@@ -497,13 +505,23 @@ def main():
         tok = yt_token()
         now = dt.datetime.now(dt.timezone.utc)
         for k, (s, video, credits, mcredit, work) in enumerate(made):
-            when = None if k == 0 else (now + dt.timedelta(hours=4 * k)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            # even the first Short is scheduled (+30 min), so if the token ever points at the wrong channel
+            # it is still private and can be deleted in YouTube Studio before anyone sees it
+            when = (now + dt.timedelta(minutes=30) + dt.timedelta(hours=4 * k)).replace(microsecond=0)
+            when = when.isoformat().replace("+00:00", "Z")
             try:
-                vid, st = yt_upload(tok, video, s["title"], description(s, credits, mcredit),
-                                    [base.text(t) for t in s.get("tags") or [] if base.text(t)], publish_at=when)
-                results.append((s, st, vid))
+                vid, st, chan = yt_upload(tok, video, s["title"], description(s, credits, mcredit),
+                                          [base.text(t) for t in s.get("tags") or [] if base.text(t)], publish_at=when)
             except Exception as e:
                 log(f"Upload failed for '{s['title']}': {e}")
+                continue
+            if chan != "?" and not same_channel(chan, CHANNEL):
+                wrong_channel = (vid, chan, when)
+                log(f"WRONG CHANNEL: https://youtu.be/{vid} went to '{chan}', not '{CHANNEL}'. No more uploads. "
+                    f"Delete it in YouTube Studio before {when} and make AI_YT_REFRESH_TOKEN again, "
+                    f"choosing the {CHANNEL} channel.")
+                break
+            results.append((s, st, vid))
         with open(done_f, "a", encoding="utf-8") as f:
             for s, st, vid in results:
                 f.write(s["url"].strip() + "\n")
@@ -516,6 +534,9 @@ def main():
         for p in work.iterdir():
             if p.name not in {video.name, "script.json"}:
                 p.unlink(missing_ok=True)
+    if wrong_channel:  # red run in GitHub (and an email) so a wrong-channel upload is never missed
+        raise RuntimeError(f"Short https://youtu.be/{wrong_channel[0]} was uploaded to '{wrong_channel[1]}' "
+                           f"instead of '{CHANNEL}' - delete it before {wrong_channel[2]}")
 
 
 if __name__ == "__main__":
