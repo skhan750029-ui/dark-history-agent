@@ -40,6 +40,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg fonts-dejavu-core fonts-noto-core
           pip install -q pillow
+          # free backup voice (no key, no quota) for when Google TTS fails or its trial/billing ends
+          pip install -q edge-tts || echo "edge-tts not installed - no backup voice"
           # free offline speech recognition: puts every caption exactly where the word is spoken
           pip install -q faster-whisper || echo "faster-whisper not installed - captions use estimated timing"
           # Anton: free bold caption font (SIL Open Font License) from the Google Fonts repository
@@ -65,6 +67,7 @@ jobs:
           PRIVACY: ${{ inputs.privacy || vars.PRIVACY || 'public' }}
           TTS_VOICE: ${{ vars.TTS_VOICE }}
           TTS_RATE: ${{ vars.TTS_RATE }}
+          EDGE_VOICE: ${{ vars.EDGE_VOICE }}
           LONG_MINUTES: ${{ vars.LONG_MINUTES || '11' }}
         run: python agent/studio.py ${{ inputs.upload == 'no' && '--no-upload' || '' }}
       - name: Save topic list and log

@@ -921,6 +921,29 @@ def with_pauses(text):
     return re.sub(r"([.!?…])\s+(?=\S)", r"\1 [pause short] ", t)
 
 
+EDGE_VOICE = os.getenv("EDGE_VOICE") or ("en-US-AndrewMultilingualNeural" if LANG == "en" else "ur-PK-AsadNeural")
+
+
+def edge_tts_voice(text, path):
+    """Free Microsoft neural voice (edge-tts, no key, no quota) - the backup when Google TTS fails or its
+    free trial / billing stops, so the video is always made."""
+    import asyncio
+    import edge_tts
+    rate = float(os.getenv("TTS_RATE") or 1.0)
+    pct = f"{round((rate - 1) * 100):+d}%"
+    last = None
+    for attempt in range(4):
+        try:
+            asyncio.run(edge_tts.Communicate(text, EDGE_VOICE, rate=pct, pitch="-2Hz").save(str(path)))
+            if Path(path).exists() and Path(path).stat().st_size > 1000:
+                return
+            last = "empty audio"
+        except Exception as e:
+            last = str(e)[:200]
+        time.sleep(4 * (attempt + 1))
+    raise RuntimeError(f"edge-tts failed: {last}")
+
+
 def google_tts(text, path):
     key = os.environ["GOOGLE_TTS_KEY"]
     rate = float(os.getenv("TTS_RATE") or 1.0)  # Enceladus, picked from the voice samples, at normal pace
@@ -996,7 +1019,8 @@ def split_points(texts, total, mids):
 
 def narrate(scenes, work, offline):
     """Speaks the whole story; writes work/voice.wav and returns the duration of every scene."""
-    engines = ["offline"] if offline else (["gemini"] if GEMINI_TTS["on"] else []) + ["google"]
+    engines = ["offline"] if offline else (["gemini"] if GEMINI_TTS["on"] else []) + (
+        ["google"] if os.getenv("GOOGLE_TTS_KEY") else []) + ["edge"]
     chunks = tts_chunks(scenes)
     for engine in engines:
         try:
@@ -1009,6 +1033,8 @@ def narrate(scenes, work, offline):
                          "-t", f"{max(2.5, len(text) / 14):.2f}", raw])
                 elif engine == "gemini":
                     gemini_tts(text, raw)
+                elif engine == "edge":
+                    edge_tts_voice(text, raw)
                 else:
                     google_tts(text, raw)
                 nxt = chunks[k + 1][0] if k + 1 < len(chunks) else None
@@ -1935,6 +1961,8 @@ def voice_line(line, wav, work):
              "-t", f"{max(1.5, len(line) / 14):.2f}", raw])
     elif engine == "gemini":
         gemini_tts(speakable(line), raw)
+    elif engine == "edge":
+        edge_tts_voice(speakable(line), raw)
     else:
         google_tts(speakable(line), raw)
     run(["ffmpeg", "-y", "-i", raw, "-af", "highpass=f=70,acompressor=threshold=-18dB:ratio=3:attack=5:release=150,"
@@ -1975,9 +2003,13 @@ def render_short(story, clean_video, work, starts, durs, total, which, k):
     idxs = [i for i, s in enumerate(scenes) if s["chapter"] == ch and not (hook and s.get("cold_open"))] or [0]
     tag = f"short{k}"
     parts, caps, t = [], [], 0.0
+    hw = work / f"{tag}_hook.wav"
+    try:  # a voice problem only costs the Short its extra line, never the Short itself
+        hd = voice_line(hook, hw, work) if hook else 0.0
+    except Exception as e:
+        log(f"Short hook line skipped (voice failed: {str(e)[:120]})")
+        hook = ""
     if hook:
-        hw = work / f"{tag}_hook.wav"
-        hd = voice_line(hook, hw, work)
         drama = next((i for i in idxs if scenes[i].get("hit")), idxs[0])
         parts.append(short_piece(scenes[drama], hw, hd, work, work / f"{tag}_hook.mp4", drama, hit=True))
         caps += line_captions(hook, 0, hd)
@@ -1986,7 +2018,11 @@ def render_short(story, clean_video, work, starts, durs, total, which, k):
         caps.append((0, 3.0, title.upper(), "Top"))
     loop_d, lw = 0.0, work / f"{tag}_loop.wav"
     if loop:
-        loop_d = voice_line(loop, lw, work)
+        try:
+            loop_d = voice_line(loop, lw, work)
+        except Exception as e:
+            log(f"Short loop line skipped (voice failed: {str(e)[:120]})")
+            loop = ""
     room = 58.5 - t - loop_d
     s0 = starts[idxs[0]]
     end = s0

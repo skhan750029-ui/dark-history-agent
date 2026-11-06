@@ -25,7 +25,7 @@ Settings come from environment variables (GitHub Secrets):
   CHANNEL_NAME        optional  default "Dark History"
   PRIVACY             optional  public | unlisted | private (default public)
   KOKORO_VOICE        optional  narrator voice (default am_michael; e.g. bm_george, am_onyx)
-  VOICE               optional  edge-tts voice, only used if USE_EDGE_TTS=1
+  VOICE               optional  edge-tts voice: first choice if USE_EDGE_TTS=1, else the backup when Kokoro fails
 """
 import argparse
 import asyncio
@@ -340,6 +340,15 @@ def tts(text, path, offline=False):
         except Exception as e:
             log(f"Kokoro retry {i + 1}: {e}")
             time.sleep(2)
+    for i in range(3):  # last free backup: edge-tts needs no key or quota, so the video is still made
+        try:
+            asyncio.run(_edge(text, path))
+            if path.exists() and path.stat().st_size > 1000:
+                log("Voice: Kokoro failed, used free edge-tts voice")
+                return
+        except Exception as e:
+            log(f"edge-tts backup retry {i + 1}: {str(e)[:120]}")
+        time.sleep(4 * (i + 1))
     raise RuntimeError("Voice generation failed")
 
 
