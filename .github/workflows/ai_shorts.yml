@@ -1,0 +1,95 @@
+name: Everyday AI Easy - 3 Shorts
+
+# Separate channel and separate bot (agent/ai_shorts.py). Dark History's workflow is untouched.
+on:
+  schedule:
+    - cron: "41 8 * * *"   # ~08:41 UTC (Dark History runs ~15:13 UTC); Shorts publish now, +4 h, +8 h
+  workflow_dispatch:
+    inputs:
+      privacy:
+        description: "public / unlisted / private"
+        required: false
+        default: ""
+      upload:
+        description: "Upload to YouTube? (no = test run, videos only in Artifacts)"
+        type: choice
+        options: ["yes", "no"]
+        default: "yes"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ai-shorts-agent
+  cancel-in-progress: false
+
+jobs:
+  make-and-upload:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-base-en-v1
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core fonts-noto-core
+          pip install -q pillow
+          pip install -q edge-tts || echo "edge-tts not installed - no backup voice"
+          pip install -q faster-whisper || echo "faster-whisper not installed - captions use estimated timing"
+          mkdir -p ~/.local/share/fonts
+          curl -fsSL -o ~/.local/share/fonts/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf || echo "Anton font not downloaded"
+          fc-cache -f >/dev/null
+      - name: Make and upload 3 Shorts
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          GOOGLE_TTS_KEY: ${{ secrets.AI_GOOGLE_TTS_KEY || secrets.GOOGLE_TTS_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          AI_YT_CLIENT_ID: ${{ secrets.AI_YT_CLIENT_ID }}
+          AI_YT_CLIENT_SECRET: ${{ secrets.AI_YT_CLIENT_SECRET }}
+          AI_YT_REFRESH_TOKEN: ${{ secrets.AI_YT_REFRESH_TOKEN }}
+          CHANNEL_NAME: ${{ vars.AI_CHANNEL_NAME || 'Everyday AI Easy' }}
+          PRIVACY: ${{ inputs.privacy || vars.AI_PRIVACY || 'public' }}
+          AI_TTS_VOICE: ${{ vars.AI_TTS_VOICE }}
+          AI_TTS_RATE: ${{ vars.AI_TTS_RATE }}
+          AI_EDGE_VOICE: ${{ vars.AI_EDGE_VOICE }}
+        run: python agent/ai_shorts.py ${{ inputs.upload == 'no' && '--no-upload' || '' }}
+      - name: Save topic list and log
+        if: always()
+        # same safe re-apply as Dark History: this run's data on top of the newest branch, both sides' lines kept
+        run: |
+          git config user.name "everyday-ai-agent"
+          git config user.email "agent@users.noreply.github.com"
+          rm -rf /tmp/ai-data && mkdir -p data/ai && cp -r data/ai /tmp/ai-data
+          for try in 1 2 3; do
+            git fetch -q origin "$GITHUB_REF_NAME"
+            git reset -q --hard "origin/$GITHUB_REF_NAME"
+            mkdir -p data/ai
+            for f in topics_done.txt upload_log.csv; do
+              [ -f "/tmp/ai-data/$f" ] || continue
+              touch "data/ai/$f"
+              grep -vxF -f "data/ai/$f" "/tmp/ai-data/$f" >> "data/ai/$f" || true
+            done
+            [ -d /tmp/ai-data/previews ] && mkdir -p data/ai/previews && cp /tmp/ai-data/previews/* data/ai/previews/
+            git add data/ai/
+            git diff --cached --quiet && break
+            git commit -q -m "Log Everyday AI Easy shorts" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break
+            sleep 10
+          done
+      - name: Keep a copy of the videos (5 days)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ai-shorts
+          path: out/ai/
+          retention-days: 5
