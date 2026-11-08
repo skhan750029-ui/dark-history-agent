@@ -13,8 +13,8 @@ on:
       upload:
         description: "Upload to YouTube? (no = test run, videos only in Artifacts)"
         type: choice
-        options: ["yes", "no"]
-        default: "yes"
+        options: ["no", "yes"]
+        default: "no"
 
 permissions:
   contents: write
@@ -25,6 +25,10 @@ concurrency:
 
 jobs:
   make-and-upload:
+    # Real uploads are OFF until the owner approves the new format: set the repository variable
+    # AI_UPLOAD = on (Settings -> Secrets and variables -> Actions -> Variables). Until then the daily
+    # schedule is skipped and manual runs never upload, whatever the "upload" input says.
+    if: github.event_name != 'schedule' || vars.AI_UPLOAD == 'on'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -65,7 +69,7 @@ jobs:
           AI_TTS_VOICE: ${{ vars.AI_TTS_VOICE }}
           AI_TTS_RATE: ${{ vars.AI_TTS_RATE }}
           AI_EDGE_VOICE: ${{ vars.AI_EDGE_VOICE }}
-        run: python agent/ai_shorts.py ${{ inputs.upload == 'no' && '--no-upload' || '' }}
+        run: python agent/ai_shorts.py ${{ (vars.AI_UPLOAD == 'on' && inputs.upload != 'no') && '' || '--no-upload' }}
       - name: Save topic list and log
         if: always()
         # same safe re-apply as Dark History: this run's data on top of the newest branch, both sides' lines kept
