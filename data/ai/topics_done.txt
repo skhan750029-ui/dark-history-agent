@@ -1,2 +1,4 @@
 https://openai.com/index/introducing-images-2-6
 https://blog.google/innovation-and-ai/technology/developers-tools/introducing-gemini-omni-1-2-flash/
+https://aws.amazon.com/blogs/machine-learning/sagemaker-inference-now-supports-multi-instance-gpu-to-maximize-gpu-utilization-for-model-endpoints/
+https://huggingface.co/blog/open-asr-leaderboard-liva
