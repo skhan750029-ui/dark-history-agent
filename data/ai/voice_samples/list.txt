@@ -1,0 +1,4 @@
+1. en-US-Chirp3-HD-Achird (male, friendly) - 22.5s -> 1_Achird.mp3
+2. en-US-Chirp3-HD-Sulafat (female, warm) - 26.7s -> 2_Sulafat.mp3
+3. en-US-Chirp3-HD-Umbriel (male, easy-going) - 21.7s -> 3_Umbriel.mp3
+4. en-US-Chirp3-HD-Callirrhoe (female, easy-going) - 21.9s -> 4_Callirrhoe.mp3
