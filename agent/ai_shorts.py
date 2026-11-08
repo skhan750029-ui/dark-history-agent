@@ -1,26 +1,32 @@
 #!/usr/bin/env python3
 """
-Everyday AI Easy - 2 YouTube Shorts a day about new AI tools and AI news, in simple English.
+Everyday AI Easy - YouTube Shorts that show real, well-known AI tools in plain, calm English.
 
-Separate channel, separate bot: it only *uses* the tested building blocks of studio.py (free AI
-writers with 429 backoff, Google TTS with the free edge-tts backup, word-synced captions, stock clip
-search) and never changes the Dark History bot. Its own data lives in data/ai/.
+Formats
+  - listicle (most days): "3 AI tools for students / small business / job seekers / creators / your phone"
+  - explainer (now and then): one tool, 3 things it can do
+Every tool comes from agent/ai_tools.json (real, well-known tools only). Each run opens the tool's official
+page in a real browser (Playwright): the tool is used only if its name is on that page, and every feature
+line in the script must be backed by words copied from that page (checked in code) - otherwise it is dropped.
 
-Pipeline: official AI news feeds (OpenAI, Google, DeepMind, NVIDIA, Hugging Face, Apple, AWS,
-Mistral) ranked by what people are talking about on Hacker News -> the 2 most useful stories for
-ordinary people -> facts ONLY from the official post -> 45-55 s script (hook first, no hype, loop
-ending) -> bright friendly voice -> modern stock clips (vertical) -> big centred captions -> upload
-to the Everyday AI Easy channel. It uses Dark History's Google Cloud project / OAuth client
-(YT_CLIENT_ID / YT_CLIENT_SECRET) with the new channel's own refresh token (AI_YT_REFRESH_TOKEN), so
-both channels share one daily YouTube quota - hence 2 Shorts a day here.
+Short = hook (9 rotating styles, never the same twice in a row, one of them a two-voice question/answer)
+-> one card per tool ("#1/3", big logo + name, the real official website scrolling inside the card,
+what it does + one example) -> "Follow for one new AI tool every day."
+Light, clean design; white sentence-case captions, 2-3 words at a time; calm, friendly voice.
+Every uploaded Short's hook style is logged in data/ai/hooks.csv to see which style works best.
 
-Secrets: GROQ_API_KEY (+ optional OPENROUTER_API_KEY / CF_*), GOOGLE_TTS_KEY (optional, edge-tts
-otherwise), PEXELS_API_KEY / PIXABAY_API_KEY, YT_CLIENT_ID / YT_CLIENT_SECRET, AI_YT_REFRESH_TOKEN
+Uploads use Dark History's OAuth client (YT_CLIENT_ID / YT_CLIENT_SECRET) with this channel's own
+AI_YT_REFRESH_TOKEN; the workflow only uploads once the repository variable AI_UPLOAD = on.
 Usage:  python agent/ai_shorts.py [--no-upload] [--count 2]
 """
 import argparse
+import asyncio
+import base64
+import csv
 import datetime as dt
+import difflib
 import html
+import io
 import json
 import os
 import random
@@ -30,289 +36,713 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import wave
 from pathlib import Path
 
 # channel settings must be in place before studio.py reads them at import time
 os.environ.setdefault("CHANNEL_NAME", "Everyday AI Easy")
 os.environ["NARRATION_LANG"] = "en"
-os.environ["TTS_RATE"] = os.getenv("AI_TTS_RATE") or "1.05"   # bright, lively pace
 os.environ["CAPTION_SYNC"] = os.getenv("CAPTION_SYNC") or "on"
-os.environ.pop("GEMINI_API_KEY", None)                       # Gemini voice is the Dark History narrator style
+os.environ.pop("GEMINI_API_KEY", None)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import studio as base  # noqa: E402  (shared building blocks; nothing in studio.py is changed)
 
-from PIL import Image  # noqa: E402
+from PIL import Image, ImageDraw, ImageFilter, ImageFont  # noqa: E402
 
 log, run, duration, http = base.log, base.run, base.duration, base.http
 ROOT = base.ROOT
 DATA = ROOT / "data" / "ai"
 OUT = ROOT / "out" / "ai"
+TOOLS_FILE = Path(__file__).resolve().parent / "ai_tools.json"
 CHANNEL = os.environ["CHANNEL_NAME"]
 PRIVACY = (os.getenv("PRIVACY") or "public").strip().lower()
-W, H, FPS = 1080, 1920, base.FPS
+W, H, FPS = 1080, 1920, 30
 
-# bright, friendly voices (Dark History uses the deep, slow Enceladus)
-base.TTS_VOICES[:] = [v for v in [os.getenv("AI_TTS_VOICE"), "en-US-Chirp3-HD-Zephyr", "en-US-Chirp3-HD-Puck",
-                                  "en-US-Chirp3-HD-Aoede"] if v]
-base.EDGE_VOICE = os.getenv("AI_EDGE_VOICE") or "en-US-AvaMultilingualNeural"
-base.GEMINI_TTS["on"] = False
+# voices: A = main narrator, B = second voice for the question/answer hook (picked from the voice samples)
+VOICE_A = os.getenv("AI_TTS_VOICE") or "en-US-Chirp3-HD-Achird"
+VOICE_B = os.getenv("AI_TTS_VOICE_B") or "en-US-Chirp3-HD-Sulafat"
+if VOICE_B == VOICE_A:  # the second voice must sound different
+    VOICE_B = "en-US-Chirp3-HD-Achird" if VOICE_A.endswith("Sulafat") else "en-US-Chirp3-HD-Sulafat"
+EDGE_A = os.getenv("AI_EDGE_VOICE") or "en-US-BrianMultilingualNeural"
+EDGE_B = os.getenv("AI_EDGE_VOICE_B") or "en-US-EmmaMultilingualNeural"
+RATE = float(os.getenv("AI_TTS_RATE") or 1.0)
+# YouTube asks for the "altered or synthetic content" label only for realistic AI content (a real person
+# saying something they didn't, AI footage of real places/events, realistic scenes that never happened).
+# A generic narration voice + real website screenshots + AI-helped script needs no label; AI_LABEL=on forces it.
+AI_LABEL = (os.getenv("AI_LABEL") or "off").strip().lower() == "on"
 
-FEEDS = [("OpenAI", "https://openai.com/news/rss.xml"),
-         ("Google", "https://blog.google/technology/ai/rss/"),
-         ("Google DeepMind", "https://deepmind.google/blog/rss.xml"),
-         ("NVIDIA", "https://blogs.nvidia.com/feed/"),
-         ("Hugging Face", "https://huggingface.co/blog/feed.xml"),
-         ("Apple", "https://machinelearning.apple.com/rss.xml"),
-         ("AWS", "https://aws.amazon.com/blogs/machine-learning/feed/"),
-         ("Mistral AI", "https://mistral.ai/rss.xml")]
-UA = "Mozilla/5.0 (compatible; EverydayAIEasyBot/1.0; +https://github.com/skhan750029-ui/dark-history-agent)"
+OUTRO = "Follow for one new AI tool every day."
+AUDIENCES = {"students": "students", "small_business": "small business owners", "job_seekers": "job seekers",
+             "creators": "creators", "phone": "your phone"}
+STYLES = {
+    "question": "a direct, honest question the viewer would ask themselves (e.g. 'Still making study notes by hand?')",
+    "little_known": "a little-known but REAL feature taken from the official text (e.g. 'Few people know NotebookLM "
+                    "can ...' - only if that feature is in the official text)",
+    "problem_solution": "name one real everyday problem of this audience, then say these tools help with it",
+    "numbered_list": "a plain numbered promise (e.g. 'Three AI tools that make job hunting easier.')",
+    "before_after": "a calm before/after contrast of the task (e.g. 'Before: a blank page. After: a first draft to "
+                    "edit.') - no invented numbers or times",
+    "warning": "a genuine, useful caution (e.g. 'Don't do this the hard way.' or 'Check AI answers before you use "
+               "them - but these tools can still save you work.') - never fear or false alarms",
+    "comparison": "an honest comparison (e.g. 'ChatGPT is not the only option.' or 'The old way versus the AI way.')",
+    "challenge": "a friendly challenge (e.g. 'Try one of these this week and see if it helps.')",
+    "qa_dialog": "two voices: speaker A asks a short question like a viewer would, speaker B answers in one "
+                 "short sentence that leads into the list",
+}
 HYPE = re.compile(r"revolution|game.?chang|mind.?blow|insane|crazy|unbelievable|shocking|you won'?t believe|"
-                  r"changes everything|world.?changing|groundbreaking|magic|destroy|killer|the end of|"
-                  r"terrifying|scary|replace (all|every)|jobs? (are )?gone|must.?see|secret", re.I)
-MUSIC = ["Carefree", "Wallpaper", "Life of Riley", "Inspired", "Digital Lemonade", "Easy Lemon",
-         "Local Forecast - Elevator", "Bossa Antigua"]
+                  r"changes everything|world.?changing|groundbreaking|magic(al)? (wand|trick)|destroy|killer|"
+                  r"the end of|terrifying|scary|replace (all|every)|jobs? (are )?gone|must.?see|secret|"
+                  r"blow your mind|10x|100x|literally", re.I)
+FAKE_EXPERIENCE = re.compile(r"\bI (tried|tested|used|use|love|found|switched|built|made)\b|\bI'?ve (been|tried|used|"
+                             r"tested)|\bmy (favorite|favourite|results?|life|workflow)\b|changed my life|\bwe tested|"
+                             r"\bI personally\b", re.I)
+NUM_WORDS = ["one", "two", "three", "four", "five"]
+MUSIC = ["Wallpaper", "Carefree", "Bossa Antigua", "Local Forecast - Elevator", "Easy Lemon"]
+UA_MOBILE = ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
+             "Version/17.5 Mobile/15E148 Safari/604.1")
+BLOCKED = re.compile(r"just a moment|verify you are human|are you a robot|access denied|attention required|"
+                     r"captcha|enable javascript and cookies|request blocked|403 forbidden|page not found|404",
+                     re.I)
+
+# light design
+BG_TOP, BG_BOTTOM = (248, 250, 252), (236, 241, 255)
+INK, MUTED, ACCENT = (17, 24, 39), (100, 116, 139), (79, 70, 229)
+CARD_X, CARD_Y, CARD_W, CARD_H = 90, 390, 900, 960
+CAP_Y = 1455            # captions sit under the card, above the Shorts buttons/title area
 
 
-def get_text(url, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "en"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read().decode("utf-8", "replace")
-
+# =============================================================== small helpers
 
 def clean(s):
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s or ""))).strip()
 
 
-# =============================================================== 1. TOPICS (official sources only)
+def norm(s):
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", (s or "").lower())).strip()
 
-def parse_feed(source, xml):
-    items = []
-    for block in re.findall(r"<(?:item|entry)\b.*?</(?:item|entry)>", xml, re.S)[:25]:
-        title = clean((re.search(r"<title[^>]*>(.*?)</title>", block, re.S) or [None, ""])[1]
-                      .replace("<![CDATA[", "").replace("]]>", ""))
-        link = (re.search(r'<link[^>]*href="([^"]+)"', block) or re.search(r"<link>\s*(?:<!\[CDATA\[)?([^<\]]+)",
-                                                                           block))
-        date = re.search(r"<(?:pubDate|published|updated)>([^<]+)<", block)
-        summ = re.search(r"<(?:description|summary|content)[^>]*>(.*?)</(?:description|summary|content)>", block, re.S)
-        if not (title and link):
+
+def load_tools():
+    return json.loads(TOOLS_FILE.read_text(encoding="utf-8"))["tools"]
+
+
+LOG_FIELDS = ["date", "video", "privacy", "format", "audience", "hook_style", "title", "tools"]
+
+
+def history():
+    f = DATA / "hooks.csv"
+    if not f.exists():
+        return []
+    with open(f, encoding="utf-8", newline="") as fh:
+        return list(csv.DictReader(fh))
+
+
+def pick_least_recent(options, recent, rng, banned=()):
+    """Option used least in `recent` (and longest ago); never one in `banned`."""
+    opts = [o for o in options if o not in banned] or list(options)
+    rng.shuffle(opts)
+    last_at = {o: max((i for i, r in enumerate(recent) if r == o), default=-1) for o in opts}
+    return min(opts, key=lambda o: (recent.count(o), last_at[o]))
+
+
+def pick_style(recent_styles, rng):
+    """Never the same style twice in a row; the two-voice style at most once in 6 Shorts."""
+    banned = set(recent_styles[-1:])
+    if "qa_dialog" in recent_styles[-5:]:
+        banned.add("qa_dialog")
+    return pick_least_recent(list(STYLES), recent_styles[-9:], rng, banned)
+
+
+def recent_tools(hist, days):
+    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+    out = set()
+    for r in hist:
+        try:
+            when = dt.datetime.fromisoformat(r["date"])
+        except Exception:
             continue
-        when = None
-        if date:
-            for fmt in ("%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z", "%Y-%m-%dT%H:%M:%S%z",
-                        "%Y-%m-%dT%H:%M:%S.%f%z"):
+        if when >= since:
+            out |= {t.strip().lower() for t in (r.get("tools") or "").split(";") if t.strip()}
+    return out
+
+
+# =============================================================== 1. OFFICIAL PAGES (verify + screenshot)
+
+HIDE_POPUPS_JS = """() => {
+  const vw = innerWidth, vh = innerHeight;
+  for (const el of document.querySelectorAll('body *')) {
+    const s = getComputedStyle(el);
+    if ((s.position === 'fixed' || s.position === 'sticky') ) {
+      const r = el.getBoundingClientRect();
+      const big = r.width * r.height > 0.25 * vw * vh;
+      const bottom = r.top > vh * 0.45;
+      const txt = (el.id + ' ' + el.className + ' ' + (el.getAttribute('aria-label') || '')).toString().toLowerCase();
+      if (big || bottom || /cookie|consent|gdpr|banner|modal|popup|dialog|newsletter|onetrust|cky|cmp/.test(txt))
+        el.style.setProperty('display', 'none', 'important');
+    }
+  }
+  document.documentElement.style.setProperty('overflow', 'auto', 'important');
+  document.body.style.setProperty('overflow', 'auto', 'important');
+}"""
+META_JS = """() => {
+  const m = n => (document.querySelector(`meta[name="${n}"],meta[property="${n}"]`) || {}).content || '';
+  const icons = [...document.querySelectorAll('link[rel~="icon"],link[rel="apple-touch-icon"],link[rel="apple-touch-icon-precomposed"]')]
+    .map(l => ({href: l.href, sizes: l.getAttribute('sizes') || '', rel: l.rel}));
+  return {desc: m('description') + ' ' + m('og:description'), site: m('og:site_name'), icons};
+}"""
+
+
+def verify_page(tool, title, text, meta):
+    """The tool's own name must be on its official page, and the page must be a real page (not a block/404)."""
+    blob = f"{title} {meta.get('desc', '')} {meta.get('site', '')} {text}"
+    if len(text) < 300 or BLOCKED.search(title) or (len(text) < 1500 and BLOCKED.search(text[:600])):
+        return False
+    names = [tool["name"]] + list(tool.get("aliases") or [])
+    return any(re.search(r"(?<![a-z0-9])" + re.escape(n.lower()) + r"(?![a-z0-9])", blob.lower()) for n in names)
+
+
+def icon_candidates(meta, url):
+    def size(i):
+        m = re.findall(r"(\d+)x\d+", i.get("sizes") or "")
+        return max([int(x) for x in m] or [180 if "apple" in i.get("rel", "") else 32])
+    icons = sorted((i for i in meta.get("icons") or [] if i.get("href") and not i["href"].endswith(".svg")),
+                   key=lambda i: -size(i))
+    host = urllib.parse.urlparse(url).netloc
+    return [i["href"] for i in icons] + [f"https://www.google.com/s2/favicons?domain={host}&sz=256"]
+
+
+def get_logo(cands, out):
+    for u in cands:
+        try:
+            body, _ = http(u, raw=True, timeout=30, headers={"User-Agent": UA_MOBILE})
+            im = Image.open(io.BytesIO(body))
+            im.load()
+            if min(im.size) >= 48:
+                im.convert("RGBA").save(out)
+                return out
+        except Exception:
+            continue
+    return None
+
+
+def capture(tools, work, want, min_text=0):
+    """Opens each tool's official page (mobile browser), verifies it and takes a long screenshot.
+    Returns verified tools (up to `want`) with page text, screenshot and logo."""
+    from playwright.sync_api import sync_playwright
+    got = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        ctx = browser.new_context(viewport={"width": 412, "height": 880}, device_scale_factor=2.5, is_mobile=True,
+                                  has_touch=True, user_agent=UA_MOBILE, locale="en-US")
+        for t in tools:
+            if len(got) >= want:
+                break
+            for url in t["urls"]:
+                page = ctx.new_page()
                 try:
-                    when = dt.datetime.strptime(date.group(1).strip().replace("Z", "+0000"), fmt)
-                    when = when if when.tzinfo else when.replace(tzinfo=dt.timezone.utc)
+                    resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                    if resp is not None and resp.status >= 400:
+                        raise RuntimeError(f"HTTP {resp.status}")
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=12000)
+                    except Exception:
+                        pass
+                    for _ in range(5):  # wake lazy images, then back to the top
+                        page.mouse.wheel(0, 900)
+                        page.wait_for_timeout(300)
+                    page.evaluate("window.scrollTo(0, 0)")
+                    page.wait_for_timeout(900)
+                    page.evaluate(HIDE_POPUPS_JS)
+                    title, text, meta = page.title(), page.inner_text("body"), page.evaluate(META_JS)
+                    text = re.sub(r"[ \t]+", " ", re.sub(r"\n\s*\n+", "\n", text)).strip()
+                    if not verify_page(t, title, text, meta) or len(text) < min_text:
+                        log(f"Not verified: {t['name']} at {url} (title: {title[:60]!r})")
+                        continue
+                    slug = base.slugify(t["name"])
+                    shot = work / f"site_{slug}.png"
+                    height = min(2600, page.evaluate("document.documentElement.scrollHeight") or 2600)
+                    page.screenshot(path=str(shot), full_page=True, clip={"x": 0, "y": 0, "width": 412,
+                                                                          "height": max(880, height)})
+                    logo = get_logo(icon_candidates(meta, page.url), work / f"logo_{slug}.png")
+                    facts = (clean(meta.get("desc")) + "\n" + text)[:6000]
+                    got.append({**t, "url": page.url, "domain": urllib.parse.urlparse(page.url).netloc.replace("www.", ""),
+                                "facts": facts, "shot": shot, "logo": logo})
+                    log(f"Verified on the official site: {t['name']} ({page.url})")
                     break
-                except ValueError:
-                    continue
-        items.append({"source": source, "title": title, "url": link.group(1).strip(), "date": when,
-                      "summary": clean((summ.group(1) if summ else "").replace("<![CDATA[", "").replace("]]>", ""))[:400]})
+                except Exception as e:
+                    log(f"Official page failed {t['name']} {url}: {str(e)[:120]}")
+                finally:
+                    page.close()
+        browser.close()
+    return got
+
+
+# =============================================================== 2. SCRIPT (facts only from the official pages)
+
+def quote_ok(quote, facts):
+    q, f = norm(quote), norm(facts)
+    if len(q.split()) < 3:
+        return False
+    if q in f:
+        return True
+    m = difflib.SequenceMatcher(None, f, q, autojunk=False).find_longest_match(0, len(f), 0, len(q))
+    return m.size >= 0.8 * len(q)
+
+
+def spoken_lines(s, fmt):
+    """The narration: hook line(s), then per item 'Number one: Name.' + what it does + example, then outro."""
+    lines = [{"speaker": h["speaker"], "text": h["text"], "seg": 0} for h in s["hook"]]
+    n = len(s["items"])
+    for k, it in enumerate(s["items"]):
+        lines.append({"speaker": "A", "text": f"Number {NUM_WORDS[k]}: {it['label']}.", "seg": k + 1})
+        lines.append({"speaker": "A", "text": it["does"], "seg": k + 1})
+        lines.append({"speaker": "A", "text": it["example"], "seg": k + 1})
+    lines.append({"speaker": "A", "text": OUTRO, "seg": n + 1})
+    return lines
+
+
+def problems(s, fmt, tools, style):
+    """Everything that would make the Short untrue, hypey or off-format."""
+    out = []
+    by_name = {t["name"].lower(): t for t in tools}
+    hook = s.get("hook") or []
+    if not hook or not all(h.get("text") for h in hook):
+        out.append("hook missing")
+    if style == "qa_dialog" and [h.get("speaker") for h in hook] != ["A", "B"]:
+        out.append("qa_dialog hook must be exactly 2 lines: speaker A asks, speaker B answers")
+    if style != "qa_dialog" and any(h.get("speaker") != "A" for h in hook):
+        out.append("only speaker A in this hook")
+    items = s.get("items") or []
+    if len(items) != 3:
+        out.append("need exactly 3 items")
+    for it in items:
+        tool = by_name.get((it.get("tool") or "").lower())
+        if not tool:
+            out.append(f"'{it.get('tool')}' is not one of the verified tools")
+            continue
+        if not quote_ok(it.get("quote") or "", tool["facts"]):
+            out.append(f"{tool['name']}: the quote is not copied word for word from its official text")
+        said = f"{it.get('does', '')} {it.get('example', '')}"
+        if re.search(r"\bfree\b", said, re.I) and not re.search(r"\bfree\b", tool["facts"], re.I):
+            out.append(f"{tool['name']}: says 'free' but its official text does not")
+        if len((it.get("does") or "").split()) > 18 or len((it.get("example") or "").split()) > 24:
+            out.append(f"{tool['name']}: lines too long")
+    if fmt == "listicle" and len({(it.get("tool") or "").lower() for it in items}) != len(items):
+        out.append("the 3 tools must be different")
+    said = " ".join([h.get("text", "") for h in hook] + [f"{i.get('does', '')} {i.get('example', '')}" for i in items]
+                    + [s.get("title", ""), s.get("headline", "")])
+    if HYPE.search(said):
+        out.append(f"hype words ({HYPE.search(said).group(0)})")
+    if FAKE_EXPERIENCE.search(said):
+        out.append(f"fake personal experience ({FAKE_EXPERIENCE.search(said).group(0)})")
+    used = [by_name.get((it.get("tool") or "").lower()) for it in items]
+    if re.search(r"\bfree\b", " ".join([h.get("text", "") for h in hook] + [s.get("title", "")]), re.I) \
+            and not all(t and re.search(r"\bfree\b", t["facts"], re.I) for t in used):
+        out.append("hook/title says 'free' but not every tool's official text says free")
+    return out
+
+
+def write_script(fmt, audience, style, tools, note=""):
+    if fmt == "listicle":
+        what = (f'a list Short: "3 AI tools for {AUDIENCES[audience]}". Pick the 3 tools below that are most '
+                f"useful for {AUDIENCES[audience]}; each item = one tool")
+        item_hint = '"tool": "exact tool name from the list", "label": "the tool name as spoken"'
+    else:
+        what = (f"an explainer Short about ONE tool, {tools[0]['name']}: 3 different useful things it can do, "
+                "for ordinary people; each item = one feature")
+        item_hint = (f'"tool": "{tools[0]["name"]}", "label": "feature name, 2-4 words, sentence case"')
+    facts = "\n\n".join(f"### {t['name']} (official site {t['domain']})\n{t['facts'][:2600 if fmt == 'listicle' else 5000]}"
+                        for t in tools)
+    return base.ask_json(f"""You write YouTube Shorts for "{CHANNEL}": calm, friendly explanations of real AI tools in
+plain English, like a helpful friend - never like an ad. This Short is {what}.
+
+OFFICIAL WEBSITE TEXT (the ONLY facts you may use; nothing from memory, no guesses):
+{facts}
+
+HOOK STYLE for this Short: {style} = {STYLES[style]}
+Rules:
+- The hook is 1 short line (under 14 words){' - here exactly 2 lines: A asks, B answers' if style == 'qa_dialog' else ''}.
+  It must be TRUE. No invented numbers, prices, times, rankings or "best". No "I tried / I use / my favorite" -
+  you have no personal experience. No hype words (revolutionary, game-changer, insane, secret, mind-blowing...).
+- For every item: "does" = ONE plain sentence (max 15 words) saying what it does; "example" = ONE sentence
+  (max 20 words) with a concrete everyday example of how to use it ("Upload your class notes and ask for a quiz.").
+- "quote" = 5-20 words copied EXACTLY, word for word, from that tool's official text above, that prove "does".
+- Only say "free" if the official text says free. Do not mention prices.
+- Simple words, sentence case, no emojis, no exclamation marks.
+{note}
+Return ONLY JSON:
+{{"headline": "on-screen title, max 6 words, sentence case (e.g. '3 AI tools for students')",
+  "hook": [{{"speaker": "A", "text": "..."}}],
+  "items": [{{{item_hint}, "does": "...", "example": "...", "quote": "..."}}],
+  "title": "YouTube title under 60 chars, honest, sentence case, ends with #shorts",
+  "description": "2 short plain lines about what the viewer will learn",
+  "tags": ["8-12 tags"], "hashtags": ["#aitools", "#ai", "one specific"]}}""", keys=("items", "hook"), max_tokens=2500)
+
+
+def tidy(s):
+    """Sentence case, no dashes or bullets, tidy punctuation."""
+    s = base.text(s)
+    s = re.sub(r"^\s*[-–—•*]+\s*", "", re.sub(r"\s*,?\s+[-–—]+\s+", ", ", s)).strip()
+    if s.isupper():
+        s = s.capitalize()
+    return s.replace("!", ".")
+
+
+def make_script(fmt, audience, style, tools):
+    note, s = "", None
+    for attempt in range(3):
+        s = write_script(fmt, audience, style, tools, note)
+        s["hook"] = [{"speaker": ("B" if str(h.get("speaker", "A")).strip().upper().startswith("B") else "A"),
+                      "text": tidy(h.get("text"))} for h in (s.get("hook") or []) if isinstance(h, dict)]
+        items = []
+        for it in s.get("items") or []:
+            if isinstance(it, dict):
+                items.append({k: tidy(it.get(k)) for k in ("tool", "label", "does", "example", "quote")})
+        s["items"] = items
+        if fmt == "explainer":
+            for it in items:
+                it["tool"] = tools[0]["name"]
+        for it in items:
+            it["label"] = it["label"] or it["tool"]
+        bad = problems(s, fmt, tools, style)
+        if not bad:
+            break
+        log(f"Script attempt {attempt + 1} rejected: {'; '.join(bad)[:300]}")
+        note = "Your last version broke these rules - fix them: " + "; ".join(bad)
+    else:
+        raise RuntimeError("no script passed the fact and style checks")
+    by_name = {t["name"].lower(): t for t in tools}
+    s["tools"] = [by_name[it["tool"].lower()] for it in s["items"]]
+    s["headline"] = tidy(s.get("headline")) or (f"3 AI tools for {AUDIENCES[audience]}" if fmt == "listicle"
+                                                 else tools[0]["name"])
+    s["title"] = tidy(s.get("title")) or s["headline"]
+    s["title"] = re.sub(r"\s*#shorts\b", "", s["title"], flags=re.I)[:80].strip() + " #shorts"
+    s["format"], s["audience"], s["hook_style"] = fmt, audience, style
+    s["lines"] = spoken_lines(s, fmt)
+    return s
+
+
+# =============================================================== 3. VOICE (calm, two voices for Q&A)
+
+def google_line(text, voice, path):
+    key = os.environ["GOOGLE_TTS_KEY"]
+    body = {"input": {"text": text}, "voice": {"languageCode": "-".join(voice.split("-")[:2]), "name": voice},
+            "audioConfig": {"audioEncoding": "MP3", "speakingRate": RATE, "sampleRateHertz": 24000}}
+    last = None
+    for attempt in range(5):
+        try:
+            r = http(f"https://texttospeech.googleapis.com/v1/text:synthesize?key={key}", body, timeout=120)
+            Path(path).write_bytes(base64.b64decode(r["audioContent"]))
+            return
+        except urllib.error.HTTPError as e:
+            txt = e.read()[:300]
+            last = f"{e.code} {txt!r}"
+            if e.code in (429, 500, 503):
+                time.sleep(min(base.MAX_WAIT, base.retry_after(e, txt) or 6 * (attempt + 1)))
+                continue
+            break
+        except Exception as e:
+            last = str(e)[:200]
+            time.sleep(3)
+    raise RuntimeError(f"Google TTS {voice}: {last}")
+
+
+def edge_line(text, voice, path):
+    import edge_tts
+    pct = f"{round((RATE - 1) * 100):+d}%"
+    last = None
+    for attempt in range(4):
+        try:
+            asyncio.run(edge_tts.Communicate(text, voice, rate=pct).save(str(path)))
+            if Path(path).exists() and Path(path).stat().st_size > 1000:
+                return
+            last = "empty audio"
+        except Exception as e:
+            last = str(e)[:200]
+        time.sleep(4 * (attempt + 1))
+    raise RuntimeError(f"edge-tts {voice}: {last}")
+
+
+def wav_frames(src, dst):
+    run(["ffmpeg", "-y", "-v", "error", "-i", src, "-ac", "1", "-ar", "24000", "-sample_fmt", "s16", dst])
+    with wave.open(str(dst), "rb") as w:
+        return w.readframes(w.getnframes())
+
+
+LINE_GAP, SEG_GAP, LEAD, TAIL = 0.22, 0.5, 0.08, 0.7
+
+
+def narrate(lines, work):
+    """One TTS call per line (exact timing per card). Google Chirp 3 HD; if any line fails, the whole
+    Short is redone with the free edge-tts voices so the two engines are never mixed."""
+    engines = (["google"] if os.getenv("GOOGLE_TTS_KEY") else []) + ["edge"]
+    for eng in engines:
+        try:
+            for i, ln in enumerate(lines):
+                p = work / f"line{i:02d}.mp3"
+                if eng == "google":
+                    google_line(ln["text"], VOICE_B if ln["speaker"] == "B" else VOICE_A, p)
+                else:
+                    edge_line(ln["text"], EDGE_B if ln["speaker"] == "B" else EDGE_A, p)
+            log(f"Voice: {eng} ({VOICE_A if eng == 'google' else EDGE_A})")
+            break
+        except Exception as e:
+            log(f"Voice engine {eng} failed ({str(e)[:150]}) - trying the next one")
+    else:
+        raise RuntimeError("no voice engine worked")
+    rate, pcm, t = 24000, bytearray(), 0.0
+
+    def silence(sec):
+        return b"\x00\x00" * int(sec * rate)
+    pcm += silence(LEAD)
+    t = LEAD
+    for i, ln in enumerate(lines):
+        if i:
+            gap = SEG_GAP if ln["seg"] != lines[i - 1]["seg"] else LINE_GAP
+            pcm += silence(gap)
+            t += gap
+        frames = wav_frames(work / f"line{i:02d}.mp3", work / f"line{i:02d}.wav")
+        ln["start"], ln["end"] = t, t + len(frames) / 2 / rate
+        pcm += frames
+        t = ln["end"]
+    pcm += silence(TAIL)
+    voice = work / "voice.wav"
+    with wave.open(str(voice), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(bytes(pcm))
+    return voice, t + TAIL
+
+
+# =============================================================== 4. DESIGN (light cards)
+
+def font(size, bold=True):
+    names = (["Poppins-Bold.ttf"] if bold else ["Poppins-SemiBold.ttf"]) + ["Poppins-SemiBold.ttf"]
+    dirs = [Path.home() / ".local/share/fonts", Path("/usr/share/fonts/truetype/poppins"), Path("C:/Windows/Fonts")]
+    for d in dirs:
+        for n in names:
+            if (d / n).exists():
+                return ImageFont.truetype(str(d / n), size)
+    for f in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "C:/Windows/Fonts/segoeuib.ttf",
+              "C:/Windows/Fonts/arialbd.ttf"]:
+        if Path(f).exists():
+            return ImageFont.truetype(f, size)
+    return ImageFont.load_default()
+
+
+def background():
+    grad = Image.new("RGB", (1, H))
+    grad.putdata([tuple(int(a + (b - a) * y / (H - 1)) for a, b in zip(BG_TOP, BG_BOTTOM)) for y in range(H)])
+    return grad.resize((W, H)).convert("RGBA")
+
+
+def shadowed(img, box, radius, fill=(255, 255, 255, 255), blur=26, dy=16, alpha=46):
+    x0, y0, x1, y1 = box
+    sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ImageDraw.Draw(sh).rounded_rectangle((x0, y0 + dy, x1, y1 + dy), radius, fill=(30, 41, 59, alpha))
+    img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(blur)))
+    ImageDraw.Draw(img).rounded_rectangle(box, radius, fill=fill)
+
+
+def fit_font(text, max_w, start, bold=True, low=40):
+    size = start
+    while size > low:
+        f = font(size, bold)
+        if f.getlength(text) <= max_w:
+            return f
+        size -= 4
+    return font(low, bold)
+
+
+def wrap(text, f, max_w):
+    words, lines, cur = text.split(), [], ""
+    for w in words:
+        nxt = (cur + " " + w).strip()
+        if f.getlength(nxt) <= max_w or not cur:
+            cur = nxt
+        else:
+            lines.append(cur)
+            cur = w
+    return lines + ([cur] if cur else [])
+
+
+def logo_tile(img, tool, x, y, size):
+    shadowed(img, (x, y, x + size, y + size), size // 4, blur=18, dy=10, alpha=40)
+    pad = size // 7
+    if tool.get("logo") and Path(tool["logo"]).exists():
+        lg = Image.open(tool["logo"]).convert("RGBA")
+        lg.thumbnail((size - 2 * pad, size - 2 * pad), Image.LANCZOS)
+        if lg.width < size - 2 * pad and lg.height < size - 2 * pad:  # small favicon: scale up to fill
+            k = (size - 2 * pad) / max(lg.size)
+            lg = lg.resize((max(1, int(lg.width * k)), max(1, int(lg.height * k))), Image.LANCZOS)
+        img.alpha_composite(lg, (x + (size - lg.width) // 2, y + (size - lg.height) // 2))
+    else:
+        d = ImageDraw.Draw(img)
+        f = font(int(size * 0.5))
+        ch = tool["name"][:1].upper()
+        d.text((x + size / 2, y + size / 2), ch, font=f, fill=ACCENT, anchor="mm")
+
+
+def pill(img, text, x, y, f, fill=ACCENT, ink=(255, 255, 255)):
+    d = ImageDraw.Draw(img)
+    w = int(f.getlength(text)) + 56
+    h = int(f.size * 1.5)
+    d.rounded_rectangle((x, y, x + w, y + h), h // 2, fill=fill)
+    d.text((x + w / 2, y + h / 2), text, font=f, fill=ink, anchor="mm")
+    return w, h
+
+
+def item_card(path, k, n, tool, label):
+    img = background()
+    pill(img, f"#{k}/{n}", CARD_X, 112, font(44))
+    logo_tile(img, tool, CARD_X, 200, 150)
+    d = ImageDraw.Draw(img)
+    tx = CARD_X + 150 + 34
+    d.text((tx, 212), label, font=fit_font(label, W - tx - CARD_X, 84), fill=INK)
+    sub = tool["domain"] if label.lower() == tool["name"].lower() else f"{tool['name']}  ·  {tool['domain']}"
+    d.text((tx, 318), sub, font=fit_font(sub, W - tx - CARD_X, 36, bold=False, low=26), fill=MUTED)
+    shadowed(img, (CARD_X, CARD_Y, CARD_X + CARD_W, CARD_Y + CARD_H), 40, blur=34, dy=22, alpha=60)
+    img.convert("RGB").save(path)
+
+
+def title_card(path, headline, tools, kicker=CHANNEL):
+    img = background()
+    d = ImageDraw.Draw(img)
+    f = font(46, bold=False)
+    d.text((W / 2, 560), kicker, font=f, fill=ACCENT, anchor="mm")
+    hf = font(108)
+    lines = wrap(headline, hf, W - 180)
+    if len(lines) > 3:
+        hf = font(88)
+        lines = wrap(headline, hf, W - 180)
+    y = 660
+    for ln in lines:
+        d.text((W / 2, y), ln, font=hf, fill=INK, anchor="mt")
+        y += int(hf.size * 1.18)
+    size = 200 if len(tools) > 1 else 300
+    gap = 60
+    total = len(tools) * size + (len(tools) - 1) * gap
+    x = (W - total) // 2
+    for t in tools:
+        logo_tile(img, t, x, max(y + 100, 1060), size)
+        x += size + gap
+    img.convert("RGB").save(path)
+
+
+def outro_card(path, tools):
+    img = background()
+    d = ImageDraw.Draw(img)
+    size, gap = 150, 44
+    total = len(tools) * size + (len(tools) - 1) * gap
+    x = (W - total) // 2
+    for t in tools:
+        logo_tile(img, t, x, 600, size)
+        x += size + gap
+    hf = font(96)
+    y = 870
+    for ln in wrap(OUTRO, hf, W - 200):
+        d.text((W / 2, y), ln, font=hf, fill=INK, anchor="mt")
+        y += int(hf.size * 1.2)
+    f = font(46)
+    w = int(f.getlength(CHANNEL)) + 56
+    pill(img, CHANNEL, (W - w) // 2, y + 70, f)
+    img.convert("RGB").save(path)
+
+
+def prepare_shot(src, out):
+    im = Image.open(src).convert("RGB")
+    k = CARD_W / im.width
+    im = im.resize((CARD_W, max(CARD_H, int(im.height * k))), Image.LANCZOS)
+    if im.height < CARD_H:
+        pad = Image.new("RGB", (CARD_W, CARD_H), (255, 255, 255))
+        pad.paste(im, (0, 0))
+        im = pad
+    im.save(out)
+    return out, im.height
+
+
+def card_mask(out):
+    m = Image.new("L", (CARD_W, CARD_H), 0)
+    ImageDraw.Draw(m).rounded_rectangle((0, 0, CARD_W - 1, CARD_H - 1), 40, fill=255)
+    m.save(out)
+    return out
+
+
+# =============================================================== 5. RENDER
+
+def segment(bg, dur, out, shot=None, shot_h=0, start_y=0, mask=None):
+    enc = ["-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p",
+           "-t", f"{dur:.3f}", out]
+    if not shot:
+        run(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-framerate", str(FPS), "-t", f"{dur:.3f}", "-i", bg,
+             "-vf", "fade=t=in:st=0:d=0.25:color=white,format=yuv420p", *enc])
+        return
+    maxy = max(0, shot_h - CARD_H)
+    start = min(start_y, maxy)
+    travel = maxy - start
+    speed = min(70.0, travel / max(1.0, dur - 1.6)) if travel > 0 else 0.0
+    yexpr = f"{start}+min({travel},max(0,t-1.0)*{speed:.2f})"
+    fc = (f"[1:v]crop={CARD_W}:{CARD_H}:0:'{yexpr}',format=rgba[s];[2:v]format=gray[m];[s][m]alphamerge[sm];"
+          f"[0:v][sm]overlay={CARD_X}:{CARD_Y},fade=t=in:st=0:d=0.25:color=white,format=yuv420p[v]")
+    run(["ffmpeg", "-y", "-v", "error",
+         "-loop", "1", "-framerate", str(FPS), "-t", f"{dur:.3f}", "-i", bg,
+         "-loop", "1", "-framerate", str(FPS), "-t", f"{dur:.3f}", "-i", shot,
+         "-loop", "1", "-framerate", str(FPS), "-t", f"{dur:.3f}", "-i", mask,
+         "-filter_complex", fc, "-map", "[v]", *enc])
+
+
+def caption_items(lines):
+    """White sentence-case captions, 2-3 words at a time, timed to the spoken words."""
+    items = []
+    for i, ln in enumerate(lines):
+        groups = [[w for w, _ in g] for g in base.word_groups(ln["text"], most=3)]
+        times = base.WORD_TIMES.get(i)
+        n_words = sum(len(g) for g in groups)
+        if times and len(times) == n_words:
+            k, starts = 0, []
+            for g in groups:
+                starts.append(max(ln["start"], min(times[k][0], ln["end"])))
+                k += len(g)
+            ends = starts[1:] + [min(ln["end"] + 0.25, times[-1][1] + 0.25)]
+        else:  # estimate by characters
+            tot = sum(len(" ".join(g)) + 2 for g in groups) or 1
+            starts, ends, t = [], [], ln["start"]
+            for g in groups:
+                d = (ln["end"] - ln["start"]) * (len(" ".join(g)) + 2) / tot
+                starts.append(t)
+                ends.append(t + d)
+                t += d
+        for g, s, e in zip(groups, starts, ends):
+            txt = re.sub(r"[.,;:]+$", "", " ".join(g))
+            items.append((s, max(e, s + 0.25), txt))
     return items
 
 
-def hn_buzz(days=4):
-    """Popular Hacker News stories of the last days: tells which official announcements people discuss."""
-    since = int(time.time() - days * 86400)
-    url = ("https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=400&numericFilters="
-           + urllib.parse.quote(f"created_at_i>{since},points>15"))
+def caption_ass(items, path):
+    fam = "DejaVu Sans"
     try:
-        return [(h.get("title") or "", h.get("url") or "", int(h.get("points") or 0))
-                for h in http(url, timeout=30).get("hits", [])]
-    except Exception as e:
-        log(f"Hacker News buzz failed: {e}")
-        return []
-
-
-def words(s):
-    return {w for w in re.findall(r"[a-z0-9]+", s.lower()) if len(w) > 2} - {"the", "and", "for", "with", "new",
-                                                                               "how", "you", "our", "now", "its"}
-
-
-def candidates(done, max_age_days=6):
-    items = []
-    for source, url in FEEDS:
-        try:
-            got = parse_feed(source, get_text(url))
-            items += got
-        except Exception as e:
-            log(f"Feed {source} failed: {str(e)[:100]}")
-    now = dt.datetime.now(dt.timezone.utc)
-    items = [it for it in items if it["date"] and (now - it["date"]).days <= max_age_days
-             and it["url"].strip().lower() not in done and it["title"].lower() not in done]
-    buzz = hn_buzz()
-    for it in items:
-        tw, host = words(it["title"]), urllib.parse.urlparse(it["url"]).netloc
-        it["buzz"] = sum(p for t, u, p in buzz if (u and u.rstrip("/") == it["url"].rstrip("/"))
-                         or (host and host in u and len(tw & words(t)) >= 2) or len(tw & words(t)) >= 3)
-        age_h = (now - it["date"]).total_seconds() / 3600
-        it["score"] = it["buzz"] + max(0, 120 - age_h)  # discussed + fresh
-    items.sort(key=lambda it: -it["score"])
-    log(f"Official AI stories: {len(items)} fresh, top buzz {[it['buzz'] for it in items[:5]]}")
-    return items[:18]
-
-
-def article_text(url, chars=4500):
-    """Main text of the official post (paragraphs, headings, list items)."""
-    try:
-        page = get_text(url, timeout=40)
-    except Exception as e:
-        log(f"Article fetch failed {url}: {e}")
-        return ""
-    page = re.sub(r"<(script|style|noscript|svg|nav|footer|header)\b.*?</\1>", " ", page, flags=re.S | re.I)
-    parts = [clean(p) for p in re.findall(r"<(?:p|h1|h2|h3|li)\b[^>]*>(.*?)</(?:p|h1|h2|h3|li)>", page, re.S | re.I)]
-    text = "\n".join(p for p in parts if len(p) > 40)
-    return text[:chars]
-
-
-def pick_stories(cands, count):
-    lst = "\n".join(f"{i}. [{c['source']}, {c['date']:%d %b}] {c['title']} - {c['summary'][:200]}"
-                    f" (people discussing: {c['buzz']})" for i, c in enumerate(cands))
-    got = base.ask_json(f"""You run "{CHANNEL}", a YouTube Shorts channel that explains new AI tools and AI news to
-ordinary people (not engineers) in simple English. From these OFFICIAL announcements pick the {count} that
-ordinary people would find most useful or interesting today: new tools or features they can try, big
-changes in apps they use, clear real-world impact. Skip deep research papers, enterprise-only cloud
-details, hiring/partnership/finance posts and anything only engineers care about. Prefer stories people
-are discussing. Each pick must be a different story.
-{lst}
-Return ONLY JSON: {{"picks": [{{"index": 0, "why": "one short reason"}}]}}""", keys=("picks",), max_tokens=1200)
-    out, seen = [], set()
-    for p in got.get("picks", []):
-        try:
-            i = int(p.get("index"))
-        except (TypeError, ValueError):
-            continue
-        if 0 <= i < len(cands) and i not in seen:
-            seen.add(i)
-            out.append(cands[i])
-    for i, c in enumerate(cands):  # fill up if the AI picked too few
-        if len(out) >= count:
-            break
-        if i not in seen:
-            out.append(c)
-    return out[:count]
-
-
-# =============================================================== 2. SCRIPT
-
-def write_short(story, facts, note=""):
-    s = base.ask_json(f"""Write a YouTube Short (45-55 seconds, 100-125 words) for "{CHANNEL}" about this OFFICIAL
-announcement from {story['source']} ({story['date']:%d %B %Y}): "{story['title']}"
-OFFICIAL SOURCE TEXT (the ONLY facts you may use - no outside facts, no guesses, no rumours):
-{facts or story['summary']}
-
-Rules:
-- Simple, friendly, clear English for ordinary people; explain any technical word in a few plain words.
-- NO hype: never use words like revolutionary, game-changer, insane, mind-blowing, shocking, secret,
-  "changes everything", "will replace". Calm and honest. If something is not available yet or only in
-  some countries/plans, say so.
-- Line 1 = HOOK (under 12 words): a clear question or a useful surprise, e.g. "Your phone can now ... ?"
-- Then: what it is, what you can do with it, who can use it / how to try it, one honest limit.
-- Last line = LOOP line that flows back into the hook when the Short replays.
-- No greeting, no "in this video", no channel name, no "like and subscribe" (the loop must stay clean).
-- Split into scenes of ONE sentence each (6-9 scenes). For each scene give a stock-footage search "query"
-  (2-4 simple English words that SHOW the sentence: e.g. "person using smartphone", "typing laptop office",
-  "data center servers", "video editing computer", "student studying laptop", "doctor tablet").
-{note}
-Return ONLY JSON:
-{{"title": "Shorts title under 55 chars, clear and honest, ends with #shorts",
-  "scenes": [{{"text": "sentence", "query": "..."}}],
-  "description": "2 short lines: what it is + why it matters (plain words)",
-  "tags": ["8-12 tags"], "hashtags": ["#ai", "#aitools", "one specific"]}}""", keys=("scenes",), max_tokens=2500)
-    scenes = []
-    for sc in s.get("scenes") or []:
-        t = base.text(sc.get("text") if isinstance(sc, dict) else sc)
-        # spoken dashes/bullets would show up as "- word" in the captions; a comma gives the same pause
-        t = re.sub(r"^\s*[-–—•*]+\s*", "", re.sub(r"\s*,?\s+[-–—]+\s+", ", ", t)).strip()
-        if t:
-            scenes.append({"ur": t, "chapter": 0, "query": base.text(sc.get("query") if isinstance(sc, dict) else "",
-                                                                       "person using laptop")})
-    s["scenes"] = scenes
-    s["title"] = base.text(s.get("title"), story["title"])[:95]
-    if "#shorts" not in s["title"].lower():
-        s["title"] = (s["title"][:86] + " #shorts").strip()
-    return s
-
-
-def script_for(story):
-    facts = article_text(story["url"])
-    log(f"Story: [{story['source']}] {story['title']} ({len(facts)} chars of official text)")
-    s = write_short(story, facts)
-    said = " ".join(sc["ur"] for sc in s["scenes"])
-    if HYPE.search(said + " " + s["title"]) or len(said.split()) < 70:
-        log("Script had hype words or was too short - rewriting once")
-        s2 = write_short(story, facts, "Your last version broke the rules (hype words or too short). Fix that.")
-        said2 = " ".join(sc["ur"] for sc in s2["scenes"])
-        if len(s2["scenes"]) >= 5 and not HYPE.search(said2):
-            s = s2
-    if len(s["scenes"]) < 4:
-        raise RuntimeError("script too short")
-    s["source"], s["url"] = story["source"], story["url"]
-    return s
-
-
-# =============================================================== 3. VISUALS (modern, vertical)
-
-AI_BAD = re.compile(r"cartoon|anime|animat|green.?screen|chroma|blue.?screen|emoji|mascot|logo|watermark|"
-                    r"lettering|typograph|wedding|yoga|fitness|cooking|food|kids?\b|toy|horror|blood|gun|weapon|"
-                    r"\bwar\b|explosion|halloween|zombie|skull", re.I)
-CLIP_CACHE = {}
-
-
-def find_clip(query, used):
-    """Best matching unused stock clip (Pexels portrait first, then Pixabay), or None."""
-    if query not in CLIP_CACHE:
-        found = []
-        key = os.getenv("PEXELS_API_KEY")
-        if key:
-            try:
-                for v in http("https://api.pexels.com/videos/search?orientation=portrait&size=medium&per_page=30&query="
-                              + urllib.parse.quote(query), headers={"Authorization": key}, timeout=40).get("videos", []):
-                    slug = re.sub(r"[-\d]+", " ", (v.get("url") or "").rstrip("/").split("/")[-1])
-                    files = [f for f in v.get("video_files", []) if f.get("file_type") == "video/mp4"
-                             and 720 <= (f.get("width") or 0) <= 1440 and (f.get("height") or 0) > (f.get("width") or 0)]
-                    if files and v.get("duration", 0) >= 3 and not AI_BAD.search(slug):
-                        f = sorted(files, key=lambda f: f["width"])[-1]
-                        found.append((f"px{v['id']}", f["link"], f"Video by {v.get('user', {}).get('name', 'Pexels')} on Pexels", slug))
-            except Exception as e:
-                log(f"Pexels failed '{query}': {e}")
-        key = os.getenv("PIXABAY_API_KEY")
-        if key:
-            try:
-                for v in http(f"https://pixabay.com/api/videos/?key={key}&safesearch=true&video_type=film&per_page=30&q="
-                              + urllib.parse.quote(query[:100]), timeout=40).get("hits", []):
-                    tags = v.get("tags") or ""
-                    f = (v.get("videos") or {}).get("medium") or {}
-                    if f.get("url") and v.get("duration", 0) >= 3 and not AI_BAD.search(tags):
-                        found.append((f"pb{v['id']}", f["url"], f"Video by {v.get('user', 'Pixabay')} on Pixabay", tags))
-            except Exception as e:
-                log(f"Pixabay failed '{query}': {e}")
-        CLIP_CACHE[query] = found
-    best = sorted((c for c in CLIP_CACHE[query] if c[0] not in used), key=lambda c: -base.relevance(query, c[3]))
-    return best[0] if best and base.relevance(query, best[0][3]) >= 1 else None
-
-
-def clip(src, dur, out, idx):
-    """Fits a clip to 1080x1920, bright and clean (this channel is not dark/desaturated)."""
-    try:
-        have = duration(src)
+        if "Poppins" in base.subprocess.run(["fc-list", ":family"], capture_output=True, text=True).stdout:
+            fam = "Poppins"
     except Exception:
-        have = dur
-    slow = f"setpts={dur / have:.4f}*PTS," if 0 < have < dur <= have * 1.6 else ""
-    start = (have - dur) * ((idx * 0.37) % 1) if have > dur + 1 else 0
-    vf = (f"{slow}scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},"
-          "eq=saturation=1.08:contrast=1.04:brightness=0.01,format=yuv420p")
-    run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-stream_loop", "-1", "-i", src, "-t", f"{dur:.3f}", "-vf", vf,
-         "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", out])
+        pass
+    head = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {W}
+PlayResY: {H}
+WrapStyle: 0
+ScaledBorderAndShadow: yes
 
-
-def backdrop(dur, out, idx):
-    """Never fail for lack of footage: a soft moving gradient in the channel colours."""
-    hue = [200, 260, 170, 30][idx % 4]
-    run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"gradients=s={W}x{H}:c0=0x1e3a8a:c1=0x06b6d4:speed=0.02:d={dur:.3f}",
-         "-vf", f"hue=h={hue - 200},format=yuv420p", "-t", f"{dur:.3f}", "-c:v", "libx264", "-preset", "veryfast",
-         "-crf", "22", out])
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Cap,{fam},66,&H00FFFFFF,&H00FFFFFF,&H4D1F1611,&H00000000,0,0,0,0,100,100,0,0,3,20,0,5,80,80,0,1
+"""
+    ev = []
+    for s, e, t in items:
+        t = t.replace("{", "(").replace("}", ")").replace("\\", "")
+        ev.append(f"Dialogue: 0,{base.ass_time(s)},{base.ass_time(e)},Cap,,0,0,0,,{{\\an5\\pos({W // 2},{CAP_Y})\\fad(70,0)}}{t}")
+    path.write_text(head + "\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+                    + "\n".join(ev) + "\n", encoding="utf-8")
 
 
 def music(work, seed):
@@ -333,73 +763,74 @@ def music(work, seed):
     return None, ""
 
 
-# =============================================================== 4. RENDER
-
-def render(s, work, k, used, offline=False):
-    scenes = s["scenes"]
-    durs = base.narrate(scenes, work, offline)
-    total = sum(durs)
-    voice = work / "voice.wav"
-    if total > 58.0:  # Shorts must stay under 60 s: gently speed the read up
-        f = min(1.25, total / 57.5)
+def render(s, work, k):
+    lines = s["lines"]
+    voice, total = narrate(lines, work)
+    if total > 59.0:  # keep it a classic under-a-minute Short; never faster than 1.1x
+        f = min(1.1, total / 58.5)
         fast = work / "voice_fast.wav"
-        run(["ffmpeg", "-y", "-i", voice, "-af", f"atempo={f:.4f}", fast])
+        run(["ffmpeg", "-y", "-v", "error", "-i", voice, "-af", f"atempo={f:.4f}", fast])
         fast.replace(voice)
-        durs = [d / f for d in durs]
-        total = sum(durs)
-        log(f"Short {k + 1}: voice sped up x{f:.2f} to fit")
-    base.WORD_TIMES.clear()  # never reuse the previous Short's word timing
-    if not offline:
-        base.align_words(scenes, voice)
-    starts, t = [], 0.0
-    for d in durs:
-        starts.append(t)
-        t += d
-    credits, clips, last = [], [], None
-    for i, (sc, du) in enumerate(zip(scenes, durs)):
-        c = work / f"c{i:02d}.mp4"
-        got = None if offline else (find_clip(sc["query"], used) or find_clip(" ".join(sc["query"].split()[:2]), used))
-        if got:
-            src = work / f"v{i:02d}.mp4"
-            try:
-                base.download(got[1], src)
-                used.add(got[0])
-                credits.append(got[2])
-                last = src
-            except Exception as e:
-                log(f"Clip download failed: {e}")
-                got = None
-        if got or last:
-            clip(src if got else last, du, c, i)
+        for ln in lines:
+            ln["start"], ln["end"] = ln["start"] / f, ln["end"] / f
+        total /= f
+        log(f"Short {k + 1}: voice x{f:.2f} to stay under a minute")
+    base.WORD_TIMES.clear()
+    base.align_words([{"ur": ln["text"]} for ln in lines], voice)
+
+    n = len(s["items"])
+    seg_start = [0.0]
+    for j in range(1, n + 2):
+        first = next(ln for ln in lines if ln["seg"] == j)
+        seg_start.append(first["start"] - SEG_GAP / 2)
+    seg_start.append(total)
+    mask = card_mask(work / "mask.png")
+    segs = []
+    for j in range(n + 2):
+        dur = seg_start[j + 1] - seg_start[j]
+        bg, out = work / f"card{j}.png", work / f"seg{j}.mp4"
+        if j == 0:
+            title_card(bg, s["headline"], s["tools"] if s["format"] == "listicle" else s["tools"][:1])
+            segment(bg, dur, out)
+        elif j == n + 1:
+            outro_card(bg, list({t["name"]: t for t in s["tools"]}.values()))
+            segment(bg, dur, out)
         else:
-            backdrop(du, c, i)
-        clips.append(c)
-    (work / "clips.txt").write_text("".join(f"file '{c.name}'\n" for c in clips))
-    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", work / "clips.txt", "-c", "copy", work / "visual.mp4"])
+            it, tool = s["items"][j - 1], s["tools"][j - 1]
+            item_card(bg, j, n, tool, it["label"])
+            shot, sh = prepare_shot(tool["shot"], work / f"shot{j}.png")
+            start_y = 0 if s["format"] == "listicle" else int((sh - CARD_H) * (j - 1) / 3)
+            segment(bg, dur, out, shot, sh, start_y, mask)
+        segs.append(out)
+    (work / "segs.txt").write_text("".join(f"file '{p.name}'\n" for p in segs))
+    run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", work / "segs.txt", "-c", "copy",
+         work / "visual.mp4"])
     ass = work / "caps.ass"
-    base.caption_file(base.chunk_captions(scenes, starts, durs), ass, W, H, 165)
+    caption_ass(caption_items(lines), ass)
     subs = str(ass).replace("\\", "/").replace(":", "\\:")
-    track, mcredit = (None, "") if offline else music(work, s["title"])
+    track, mcredit = music(work, s["title"])
     out = work / f"ai_short{k}.mp4"
     ins = ["-i", work / "visual.mp4", "-i", voice]
     fc = (f"[0:v]subtitles='{subs}',format=yuv420p[v];"
-          "[1:a]highpass=f=70,acompressor=threshold=-18dB:ratio=3:attack=5:release=150,"
-          "loudnorm=I=-14:TP=-1.5,aresample=44100,asplit=2[vo][sc];")
+          "[1:a]highpass=f=70,acompressor=threshold=-20dB:ratio=2.5:attack=8:release=200,"
+          "loudnorm=I=-15:TP=-1.5,aresample=44100,asplit=2[vo][sc];")
     if track:
         ins += ["-stream_loop", "-1", "-i", track]
-        fc += ("[2:a]aresample=44100,loudnorm=I=-26:TP=-4,volume=1.0[m];"
-               "[m][sc]sidechaincompress=threshold=0.05:ratio=4:attack=30:release=600[duck];"
+        fc += ("[2:a]aresample=44100,loudnorm=I=-31:TP=-6[m];"
+               "[m][sc]sidechaincompress=threshold=0.05:ratio=3:attack=40:release=700[duck];"
                "[vo][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[a]")
     else:
         fc += "[sc]anullsink;[vo]alimiter=limit=0.95[a]"
-    run(["ffmpeg", "-y", *ins, "-filter_complex", fc, "-map", "[v]", "-map", "[a]", "-t", f"{total:.2f}",
-         "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-b:a", "160k",
+    run(["ffmpeg", "-y", "-v", "error", *ins, "-filter_complex", fc, "-map", "[v]", "-map", "[a]",
+         "-t", f"{total:.2f}", "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-c:a", "aac", "-b:a", "160k",
          "-movflags", "+faststart", out])
-    log(f"Short {k + 1} ready: {out.name} ({total:.1f}s, {len(scenes)} scenes, {len(credits)} stock clips)")
-    return out, list(dict.fromkeys(credits)), mcredit
+    s["seg_start"] = seg_start
+    log(f"Short {k + 1} ready: {out.name} ({total:.1f}s, {s['format']}, hook {s['hook_style']}, "
+        f"tools {', '.join(t['name'] for t in s['tools'])})")
+    return out, mcredit
 
 
-# =============================================================== 5. YOUTUBE (own channel + project)
+# =============================================================== 6. YOUTUBE
 
 def yt_token():
     r = http("https://oauth2.googleapis.com/token", urllib.parse.urlencode({
@@ -411,7 +842,7 @@ def yt_token():
 
 def yt_upload(tok, video, title, desc, tags, publish_at=None):
     status = {"privacyStatus": PRIVACY, "selfDeclaredMadeForKids": False, "embeddable": True,
-              "containsSyntheticMedia": True}  # AI voice: honest disclosure
+              "containsSyntheticMedia": AI_LABEL}
     if publish_at and PRIVACY == "public":
         status["privacyStatus"], status["publishAt"] = "private", publish_at
     meta = {"snippet": {"title": title[:100], "description": desc[:4900], "tags": tags[:15], "categoryId": "28",
@@ -436,81 +867,110 @@ def same_channel(a, b):
     return k(a) == k(b)
 
 
-def description(s, credits, mcredit):
+def description(s, mcredit):
     tags = " ".join(([h if str(h).startswith("#") else "#" + str(h) for h in s.get("hashtags") or []]
-                     or ["#ai", "#aitools"])[:3])
-    cred = "".join(f"- {c}\n" for c in credits[:12])
-    return (f"{base.text(s.get('description'), s['title'])}\n\n"
-            f"Official source ({s['source']}): {s['url']}\n\n"
-            f"{CHANNEL}: new AI tools and AI news, explained simply. No hype, just what it does.\n"
-            "Narration voice is AI-generated.\n\n"
-            + (mcredit + "\n\n" if mcredit else "") + (f"Footage:\n{cred}\n" if cred else "") + tags)
+                     or ["#aitools", "#ai"])[:3])
+    seen, sites = set(), ""
+    for t in s["tools"]:
+        if t["name"] not in seen:
+            seen.add(t["name"])
+            sites += f"- {t['name']}: {t['url']}\n"
+    return (f"{base.text(s.get('description'), s['headline'])}\n\n"
+            f"Official websites:\n{sites}\n"
+            f"{OUTRO}\n\n" + (mcredit + "\n\n" if mcredit else "") + tags)
 
 
 # =============================================================== MAIN
 
 def preview(frames, out):
     try:
-        ims = [Image.open(f).convert("RGB").resize((270, 480)) for f in frames]
-        sheet = Image.new("RGB", (len(ims) * 280 + 10, 500), (20, 20, 24))
+        ims = [Image.open(f).convert("RGB").resize((270, 480)) for f in frames if f and Path(f).exists()]
+        sheet = Image.new("RGB", (len(ims) * 280 + 10, 500), (226, 232, 240))
         for n, im in enumerate(ims):
             sheet.paste(im, (10 + n * 280, 10))
         out.parent.mkdir(parents=True, exist_ok=True)
-        sheet.save(out, quality=80)
+        sheet.save(out, quality=82)
     except Exception as e:
         log(f"Preview skipped: {e}")
+
+
+def plan_short(k, hist, taken, rng):
+    """Format, audience and hook style for Short k (rotations based on the log + this run)."""
+    recent_fmt = [r.get("format") for r in hist][-5:] + [t["format"] for t in taken]
+    fmt = "explainer" if k >= 1 and "explainer" not in recent_fmt else "listicle"
+    recent_aud = [r.get("audience") for r in hist if r.get("format") == "listicle"][-5:] + \
+                 [t["audience"] for t in taken if t["format"] == "listicle"]
+    audience = pick_least_recent(list(AUDIENCES), recent_aud, rng, set(recent_aud[-1:]))
+    style = pick_style([r.get("hook_style") for r in hist] + [t["hook_style"] for t in taken], rng)
+    return fmt, audience, style
+
+
+def choose_tools(fmt, audience, hist, taken_tools, rng):
+    tools = load_tools()
+    avoid = recent_tools(hist, 14 if fmt == "listicle" else 30) | taken_tools
+    if fmt == "listicle":
+        pool = [t for t in tools if audience in t["for"]]
+    else:
+        pool = list(tools)
+    rng.shuffle(pool)
+    fresh = [t for t in pool if t["name"].lower() not in avoid]
+    return fresh + [t for t in pool if t["name"].lower() in avoid and t["name"].lower() not in taken_tools]
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
-    ap.add_argument("--offline", action="store_true")
     ap.add_argument("--count", type=int, default=int(os.getenv("AI_SHORTS_COUNT") or 2))
     a = ap.parse_args()
     DATA.mkdir(parents=True, exist_ok=True)
-    done_f = DATA / "topics_done.txt"
-    done = {l.strip().lower() for l in done_f.read_text(encoding="utf-8").splitlines()} if done_f.exists() else set()
-
-    cands = candidates(done)
-    if not cands:
-        raise RuntimeError("No fresh official AI stories found today")
-    stories = pick_stories(cands, a.count)
+    hist = history()
+    rng = random.Random(dt.date.today().toordinal())
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M")
-    made, used = [], set()
-    for k, story in enumerate(stories):
-        work = OUT / f"{stamp}-{k}-{base.slugify(story['title'])[:40]}"
+    made, taken, taken_tools = [], [], set()
+    for k in range(a.count):
+        fmt, audience, style = plan_short(k, hist, taken, rng)
+        log(f"Short {k + 1}: {fmt}, {'for ' + AUDIENCES[audience] if fmt == 'listicle' else 'one tool'}, hook '{style}'")
+        work = OUT / f"{stamp}-{k}-{fmt}"
         work.mkdir(parents=True, exist_ok=True)
         try:
-            s = script_for(story)
-            (work / "script.json").write_text(json.dumps(s, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
-            video, credits, mcredit = render(s, work, k, used, a.offline)
-            made.append((s, video, credits, mcredit, work))
-        except Exception as e:  # one bad story never stops the other Shorts
-            log(f"Short {k + 1} failed ({story['title'][:60]}): {e}")
+            pool = choose_tools(fmt, audience, hist, taken_tools, rng)
+            tools = capture(pool[:12], work, 5 if fmt == "listicle" else 1, 0 if fmt == "listicle" else 900)
+            if len(tools) < (3 if fmt == "listicle" else 1):
+                raise RuntimeError(f"only {len(tools)} tools verified on their official sites")
+            s = make_script(fmt, audience, style, tools)
+            (work / "script.json").write_text(json.dumps({x: v for x, v in s.items() if x != "tools"} |
+                                                         {"tools": [{"name": t["name"], "url": t["url"]} for t in s["tools"]]},
+                                                         indent=1, ensure_ascii=False, default=str), encoding="utf-8")
+            video, mcredit = render(s, work, k)
+            made.append((s, video, mcredit, work))
+            taken.append({"format": fmt, "audience": audience, "hook_style": style})
+            taken_tools |= {t["name"].lower() for t in s["tools"]}
+        except Exception as e:  # one bad Short never stops the other
+            log(f"Short {k + 1} failed: {e}")
     if not made:
         raise RuntimeError("No Short could be made")
 
     frames = []
-    for s, video, *_ in made:
-        frames.append(base.grab(video, 1.0, video.with_name("pv_a.jpg")))
-        frames.append(base.grab(video, min(20.0, duration(video) / 2), video.with_name("pv_b.jpg")))
+    for s, video, _, work in made:
+        for j in (0, 1, len(s["items"]) + 1):  # hook, first tool card, outro
+            t = (s["seg_start"][j] + s["seg_start"][j + 1]) / 2
+            frames.append(base.grab(video, t, work / f"pv{j}.jpg"))
     preview(frames, DATA / "previews" / "latest.jpg")
 
     results, wrong_channel = [], None
-    missing = [k for k in ("AI_YT_CLIENT_ID", "AI_YT_CLIENT_SECRET", "AI_YT_REFRESH_TOKEN") if not os.getenv(k)]
-    if missing and not (a.no_upload or a.offline):
-        log(f"Not uploading: add the GitHub secrets {', '.join(missing)} for the Everyday AI Easy channel "
-            "(the Shorts are in the run's Artifacts)")
-    elif not (a.no_upload or a.offline):
+    missing = [x for x in ("AI_YT_CLIENT_ID", "AI_YT_CLIENT_SECRET", "AI_YT_REFRESH_TOKEN") if not os.getenv(x)]
+    if a.no_upload:
+        log("Test run: nothing uploaded (the Shorts are in the run's Artifacts)")
+    elif missing:
+        log(f"Not uploading: missing GitHub secrets {', '.join(missing)}")
+    else:
         tok = yt_token()
         now = dt.datetime.now(dt.timezone.utc)
-        for k, (s, video, credits, mcredit, work) in enumerate(made):
-            # even the first Short is scheduled (+30 min), so if the token ever points at the wrong channel
-            # it is still private and can be deleted in YouTube Studio before anyone sees it
+        for k, (s, video, mcredit, work) in enumerate(made):
             when = (now + dt.timedelta(minutes=30) + dt.timedelta(hours=4 * k)).replace(microsecond=0)
             when = when.isoformat().replace("+00:00", "Z")
             try:
-                vid, st, chan = yt_upload(tok, video, s["title"], description(s, credits, mcredit),
+                vid, st, chan = yt_upload(tok, video, s["title"], description(s, mcredit),
                                           [base.text(t) for t in s.get("tags") or [] if base.text(t)], publish_at=when)
             except Exception as e:
                 log(f"Upload failed for '{s['title']}': {e}")
@@ -522,19 +982,22 @@ def main():
                     f"choosing the {CHANNEL} channel.")
                 break
             results.append((s, st, vid))
-        with open(done_f, "a", encoding="utf-8") as f:
+        new = not (DATA / "hooks.csv").exists()
+        with open(DATA / "hooks.csv", "a", encoding="utf-8", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=LOG_FIELDS)
+            if new:
+                w.writeheader()
             for s, st, vid in results:
-                f.write(s["url"].strip() + "\n")
-        with open(DATA / "upload_log.csv", "a", encoding="utf-8") as f:
-            for s, st, vid in results:
-                f.write(f"{dt.datetime.now(dt.timezone.utc).isoformat()},short,\"{s['title']}\",{st},"
-                        f"https://youtu.be/{vid},{s['url']}\n")
+                w.writerow({"date": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                            "video": f"https://youtu.be/{vid}", "privacy": st, "format": s["format"],
+                            "audience": s["audience"], "hook_style": s["hook_style"], "title": s["title"],
+                            "tools": ";".join(dict.fromkeys(t["name"] for t in s["tools"]))})
     log(f"Done: {len(made)} Shorts made, {len(results)} uploaded")
-    for s, video, credits, mcredit, work in made:
+    for s, video, _, work in made:
         for p in work.iterdir():
-            if p.name not in {video.name, "script.json"}:
+            if p.name not in {video.name, "script.json", "card0.png", "card1.png"} and not p.name.startswith("pv"):
                 p.unlink(missing_ok=True)
-    if wrong_channel:  # red run in GitHub (and an email) so a wrong-channel upload is never missed
+    if wrong_channel:
         raise RuntimeError(f"Short https://youtu.be/{wrong_channel[0]} was uploaded to '{wrong_channel[1]}' "
                            f"instead of '{CHANNEL}' - delete it before {wrong_channel[2]}")
 

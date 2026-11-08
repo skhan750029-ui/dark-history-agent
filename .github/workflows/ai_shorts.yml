@@ -40,15 +40,24 @@ jobs:
         with:
           path: ~/.cache/huggingface
           key: whisper-base-en-v1
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v1
       - name: Install tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg fonts-dejavu-core fonts-noto-core
-          pip install -q pillow
+          pip install -q pillow playwright
+          # real browser to open each tool's official website (verify + screenshot)
+          python -m playwright install --with-deps chromium
           pip install -q edge-tts || echo "edge-tts not installed - no backup voice"
           pip install -q faster-whisper || echo "faster-whisper not installed - captions use estimated timing"
+          # Poppins: clean, friendly free font (SIL Open Font License) for cards and captions
           mkdir -p ~/.local/share/fonts
-          curl -fsSL -o ~/.local/share/fonts/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf || echo "Anton font not downloaded"
+          for f in Poppins-Bold Poppins-SemiBold; do
+            curl -fsSL -o ~/.local/share/fonts/$f.ttf https://github.com/google/fonts/raw/main/ofl/poppins/$f.ttf || echo "$f not downloaded"
+          done
           fc-cache -f >/dev/null
       - name: Make and upload Shorts
         env:
@@ -57,8 +66,6 @@ jobs:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           GOOGLE_TTS_KEY: ${{ secrets.AI_GOOGLE_TTS_KEY || secrets.GOOGLE_TTS_KEY }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           # same Google Cloud project / OAuth client as Dark History, only the channel's refresh token differs
           AI_YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           AI_YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
@@ -67,8 +74,11 @@ jobs:
           CHANNEL_NAME: ${{ vars.AI_CHANNEL_NAME || 'Everyday AI Easy' }}
           PRIVACY: ${{ inputs.privacy || vars.AI_PRIVACY || 'public' }}
           AI_TTS_VOICE: ${{ vars.AI_TTS_VOICE }}
+          AI_TTS_VOICE_B: ${{ vars.AI_TTS_VOICE_B }}
           AI_TTS_RATE: ${{ vars.AI_TTS_RATE }}
           AI_EDGE_VOICE: ${{ vars.AI_EDGE_VOICE }}
+          AI_EDGE_VOICE_B: ${{ vars.AI_EDGE_VOICE_B }}
+          AI_LABEL: ${{ vars.AI_LABEL }}
         run: python agent/ai_shorts.py ${{ (vars.AI_UPLOAD == 'on' && inputs.upload != 'no') && '' || '--no-upload' }}
       - name: Save topic list and log
         if: always()
@@ -81,7 +91,7 @@ jobs:
             git fetch -q origin "$GITHUB_REF_NAME"
             git reset -q --hard "origin/$GITHUB_REF_NAME"
             mkdir -p data/ai
-            for f in topics_done.txt upload_log.csv; do
+            for f in topics_done.txt upload_log.csv hooks.csv; do
               [ -f "/tmp/ai-data/$f" ] || continue
               touch "data/ai/$f"
               grep -vxF -f "data/ai/$f" "/tmp/ai-data/$f" >> "data/ai/$f" || true

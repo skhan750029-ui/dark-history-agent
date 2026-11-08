@@ -1,0 +1,46 @@
+name: Everyday AI Easy - voice samples
+
+# Makes 4 calm voice samples in data/ai/voice_samples/ to pick the channel voice (no upload).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ai-shorts-agent
+  cancel-in-progress: false
+
+jobs:
+  samples:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -q pillow edge-tts
+      - name: Make samples
+        env:
+          GOOGLE_TTS_KEY: ${{ secrets.AI_GOOGLE_TTS_KEY || secrets.GOOGLE_TTS_KEY }}
+          AI_TTS_RATE: ${{ vars.AI_TTS_RATE }}
+        run: python agent/ai_voice_samples.py
+      - name: Save samples
+        run: |
+          git config user.name "everyday-ai-agent"
+          git config user.email "agent@users.noreply.github.com"
+          cp -r data/ai/voice_samples /tmp/samples
+          for try in 1 2 3; do
+            git fetch -q origin "$GITHUB_REF_NAME"
+            git reset -q --hard "origin/$GITHUB_REF_NAME"
+            mkdir -p data/ai/voice_samples && cp /tmp/samples/* data/ai/voice_samples/
+            git add data/ai/voice_samples
+            git diff --cached --quiet && break
+            git commit -q -m "Everyday AI Easy voice samples" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break
+            sleep 10
+          done
