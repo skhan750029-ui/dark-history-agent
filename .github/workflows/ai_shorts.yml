@@ -81,7 +81,8 @@ jobs:
           AI_EDGE_VOICE: ${{ vars.AI_EDGE_VOICE }}
           AI_EDGE_VOICE_B: ${{ vars.AI_EDGE_VOICE_B }}
           AI_LABEL: ${{ vars.AI_LABEL }}
-        run: python agent/ai_shorts.py ${{ (vars.AI_UPLOAD == 'on' && inputs.upload != 'no') && '' || '--no-upload' }}
+        # (an empty string counts as false in GitHub expressions, so the flag must be the "true" branch)
+        run: python agent/ai_shorts.py ${{ (vars.AI_UPLOAD != 'on' || inputs.upload == 'no') && '--no-upload' || '' }}
       - name: Save topic list and log
         if: always()
         # same safe re-apply as Dark History: this run's data on top of the newest branch, both sides' lines kept
