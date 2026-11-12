@@ -181,6 +181,9 @@ HIDE_POPUPS_JS = """() => {
         el.style.setProperty('display', 'none', 'important');
     }
   }
+  // embedded players (YouTube etc.) show "sign in / not a bot" boxes in a headless browser - hide them
+  for (const el of document.querySelectorAll('iframe, embed, object, lite-youtube, [class*="youtube" i], [id*="youtube" i]'))
+    el.style.setProperty('display', 'none', 'important');
   document.documentElement.style.setProperty('overflow', 'auto', 'important');
   document.body.style.setProperty('overflow', 'auto', 'important');
 }"""

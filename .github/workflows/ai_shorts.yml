@@ -82,7 +82,11 @@ jobs:
           AI_EDGE_VOICE_B: ${{ vars.AI_EDGE_VOICE_B }}
           AI_LABEL: ${{ vars.AI_LABEL }}
         # (an empty string counts as false in GitHub expressions, so the flag must be the "true" branch)
-        run: python agent/ai_shorts.py ${{ (vars.AI_UPLOAD != 'on' || inputs.upload == 'no') && '--no-upload' || '' }}
+        # the run's log is also saved to data/ai/last_run.log so it can be read without opening Actions
+        run: |
+          set -o pipefail
+          mkdir -p data/ai
+          python -u agent/ai_shorts.py ${{ (vars.AI_UPLOAD != 'on' || inputs.upload == 'no') && '--no-upload' || '' }} 2>&1 | tee data/ai/last_run.log
       - name: Save topic list and log
         if: always()
         # same safe re-apply as Dark History: this run's data on top of the newest branch, both sides' lines kept
@@ -100,6 +104,7 @@ jobs:
               grep -vxF -f "data/ai/$f" "/tmp/ai-data/$f" >> "data/ai/$f" || true
             done
             [ -d /tmp/ai-data/previews ] && mkdir -p data/ai/previews && cp /tmp/ai-data/previews/* data/ai/previews/
+            [ -f /tmp/ai-data/last_run.log ] && cp /tmp/ai-data/last_run.log data/ai/
             git add data/ai/
             git diff --cached --quiet && break
             git commit -q -m "Log Everyday AI Easy shorts" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break
