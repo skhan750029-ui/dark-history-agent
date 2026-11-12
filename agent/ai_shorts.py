@@ -932,24 +932,36 @@ def main():
     made, taken, taken_tools = [], [], set()
     for k in range(a.count):
         fmt, audience, style = plan_short(k, hist, taken, rng)
-        log(f"Short {k + 1}: {fmt}, {'for ' + AUDIENCES[audience] if fmt == 'listicle' else 'one tool'}, hook '{style}'")
-        work = OUT / f"{stamp}-{k}-{fmt}"
-        work.mkdir(parents=True, exist_ok=True)
-        try:
-            pool = choose_tools(fmt, audience, hist, taken_tools, rng)
-            tools = capture(pool[:12], work, 5 if fmt == "listicle" else 1, 0 if fmt == "listicle" else 900)
-            if len(tools) < (3 if fmt == "listicle" else 1):
-                raise RuntimeError(f"only {len(tools)} tools verified on their official sites")
-            s = make_script(fmt, audience, style, tools)
-            (work / "script.json").write_text(json.dumps({x: v for x, v in s.items() if x != "tools"} |
-                                                         {"tools": [{"name": t["name"], "url": t["url"]} for t in s["tools"]]},
-                                                         indent=1, ensure_ascii=False, default=str), encoding="utf-8")
-            video, mcredit = render(s, work, k)
-            made.append((s, video, mcredit, work))
-            taken.append({"format": fmt, "audience": audience, "hook_style": style})
-            taken_tools |= {t["name"].lower() for t in s["tools"]}
-        except Exception as e:  # one bad Short never stops the other
-            log(f"Short {k + 1} failed: {e}")
+        failed_aud = set()
+        for attempt in range(3):  # a failed Short is retried with another audience, last try as an explainer
+            if attempt:
+                failed_aud.add(audience)
+                if attempt == 2:
+                    fmt = "explainer"
+                else:
+                    audience = pick_least_recent([x for x in AUDIENCES if x not in failed_aud], [], rng)
+            log(f"Short {k + 1} (try {attempt + 1}): {fmt}, "
+                f"{'for ' + AUDIENCES[audience] if fmt == 'listicle' else 'one tool'}, hook '{style}'")
+            work = OUT / f"{stamp}-{k}-{attempt}-{fmt}"
+            work.mkdir(parents=True, exist_ok=True)
+            try:
+                pool = choose_tools(fmt, audience, hist, taken_tools, rng)
+                tools = capture(pool[:12], work, 5 if fmt == "listicle" else 1, 0 if fmt == "listicle" else 900)
+                if len(tools) < (3 if fmt == "listicle" else 1):
+                    raise RuntimeError(f"only {len(tools)} tools verified on their official sites")
+                s = make_script(fmt, audience, style, tools)
+                (work / "script.json").write_text(json.dumps({x: v for x, v in s.items() if x != "tools"} |
+                                                             {"tools": [{"name": t["name"], "url": t["url"]} for t in s["tools"]]},
+                                                             indent=1, ensure_ascii=False, default=str), encoding="utf-8")
+                video, mcredit = render(s, work, k)
+                made.append((s, video, mcredit, work))
+                taken.append({"format": fmt, "audience": audience, "hook_style": style})
+                taken_tools |= {t["name"].lower() for t in s["tools"]}
+                break
+            except Exception as e:  # one bad Short never stops the other
+                log(f"Short {k + 1} try {attempt + 1} failed: {type(e).__name__}: {e}")
+                import traceback
+                log(traceback.format_exc()[-1500:])
     if not made:
         raise RuntimeError("No Short could be made")
 
