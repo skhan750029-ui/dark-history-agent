@@ -927,7 +927,11 @@ def main():
     a = ap.parse_args()
     DATA.mkdir(parents=True, exist_ok=True)
     hist = history()
-    rng = random.Random(dt.date.today().toordinal())
+    today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+    if os.getenv("RUN_EVENT") == "schedule" and not a.no_upload and any(r.get("date", "").startswith(today) for r in hist):
+        log("Today's Shorts are already uploaded - this backup run has nothing to do")
+        return
+    rng =random.Random(dt.date.today().toordinal())
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M")
     made, taken, taken_tools = [], [], set()
     for k in range(a.count):
