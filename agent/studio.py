@@ -1626,6 +1626,7 @@ def pixabay_image(query, used):
 
 SETTING = ""
 AI_OFF = {"off": False}
+SYNTHETIC = {"on": True}  # safe default until gather_visuals has seen what is really in the video
 
 
 def ai_image(prompt, path, seed):
@@ -1726,7 +1727,7 @@ def gather_visuals(scenes, work, offline, durs):
                     elif kind == "image" and sc.get("prompt"):
                         p = work / f"i_{i:03d}.jpg"
                         if ai_image(sc["prompt"], p, 1000 + i):
-                            sc["asset"], sc["kind"] = p, "image"
+                            sc["asset"], sc["kind"], sc["ai_made"] = p, "image", True
                         elif sc.get("query"):
                             got = pixabay_image(sc["query"], used_img) or pixabay_image(" ".join(sc["query"].split()[:2]), used_img)
                             if got:
@@ -1767,6 +1768,13 @@ def gather_visuals(scenes, work, offline, durs):
         if not sc.get("asset"):
             j = min(found, key=lambda j: (scenes[j]["chapter"] != sc["chapter"], abs(j - i), j > i))
             sc["asset"], sc["kind"] = scenes[j]["asset"], scenes[j]["kind"]
+            sc["ai_made"] = scenes[j].get("ai_made", False)
+    # YouTube's "altered or synthetic content" label is needed only for realistic AI scenes (an AI voice
+    # narrating real footage does not need it): set it only if an AI picture really is in the video
+    n_ai = sum(1 for s in scenes if s.get("ai_made"))
+    SYNTHETIC["on"] = n_ai > 0
+    log(f"AI-made realistic pictures in the video: {n_ai} scene(s) -> synthetic-content label "
+        f"{'ON' if SYNTHETIC['on'] else 'off'}")
     return list(dict.fromkeys(credits))
 
 
@@ -2500,7 +2508,7 @@ def yt_token():
 
 def yt_upload(tok, video, title, desc, tags, publish_at=None, thumb=None):
     status = {"privacyStatus": PRIVACY, "selfDeclaredMadeForKids": False, "embeddable": True,
-              "containsSyntheticMedia": True}  # AI voice + AI images: honest disclosure
+              "containsSyntheticMedia": bool(SYNTHETIC["on"])}  # true only if a realistic AI scene is in it
     if publish_at and PRIVACY == "public":
         status["privacyStatus"] = "private"
         status["publishAt"] = publish_at
@@ -2666,7 +2674,9 @@ def description(story, credits, extra=""):
     tags = " ".join(story.get("hashtags", [])[:3])
     head = (f"{story['description'].strip()}\n\n{extra}"
             f"Subscribe to {CHANNEL} for the stories history tried to forget.\n\n"
-            f"Narration: {'English' if LANG == 'en' else 'Urdu'}. Some scenes are AI-generated illustrations of historical events.\n\n"
+            f"Narration: {'English' if LANG == 'en' else 'Urdu'}."
+            + (" Some scenes are AI-generated illustrations of historical events." if SYNTHETIC["on"] else "")
+            + "\n\n"
             + "".join(c + "\n\n" for c in MUSIC_CREDIT))
     tail = "".join(c + "\n" for c in SFX_CREDITS[:15]) + f"\n{tags}"
     cred = ""
