@@ -766,6 +766,18 @@ def music(work, seed):
     return None, ""
 
 
+def mean_volume(path, start, end):
+    """Average loudness (dB) of a stretch of audio; -91 for silence or on any problem."""
+    try:
+        r = base.subprocess.run(["ffmpeg", "-v", "info", "-ss", f"{max(0.0, start):.3f}", "-to", f"{end:.3f}",
+                                 "-i", str(path), "-vn", "-af", "volumedetect", "-f", "null", "-"],
+                                capture_output=True, text=True, timeout=120)
+        m = re.search(r"mean_volume: (-?[\d.]+) dB", r.stderr)
+        return float(m.group(1)) if m else -91.0
+    except Exception:
+        return -91.0
+
+
 def render(s, work, k):
     lines = s["lines"]
     voice, total = narrate(lines, work)
@@ -813,20 +825,35 @@ def render(s, work, k):
     subs = str(ass).replace("\\", "/").replace(":", "\\:")
     track, mcredit = music(work, s["title"])
     out = work / f"ai_short{k}.mp4"
-    ins = ["-i", work / "visual.mp4", "-i", voice]
-    fc = (f"[0:v]subtitles='{subs}',format=yuv420p[v];"
-          "[1:a]highpass=f=70,acompressor=threshold=-20dB:ratio=2.5:attack=8:release=200,"
-          "loudnorm=I=-15:TP=-1.5,aresample=44100,asplit=2[vo][sc];")
+    outro = lines[-1]
+    log(f"Outro voice level in narration: {mean_volume(voice, outro['start'], outro['end']):.1f} dB")
+    # audio is finished in separate steps (normalised voice, then a ducked music bed) so no filter's
+    # look-ahead or end-of-stream can cut the last line; the final mix only adds the two full-length files
+    vnorm = work / "voice_norm.wav"
+    run(["ffmpeg", "-y", "-v", "error", "-i", voice, "-af",
+         "highpass=f=70,acompressor=threshold=-20dB:ratio=2.5:attack=8:release=200,loudnorm=I=-15:TP=-1.5,"
+         f"aresample=44100,apad,atrim=0:{total + 0.5:.3f}", "-ac", "1", vnorm])
+    ins = ["-i", work / "visual.mp4", "-i", vnorm]
+    fc = f"[0:v]subtitles='{subs}',format=yuv420p[v];"
     if track:
-        ins += ["-stream_loop", "-1", "-i", track]
-        fc += ("[2:a]aresample=44100,loudnorm=I=-31:TP=-6[m];"
-               "[m][sc]sidechaincompress=threshold=0.05:ratio=3:attack=40:release=700[duck];"
-               "[vo][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[a]")
+        bed = work / "music_bed.wav"
+        run(["ffmpeg", "-y", "-v", "error", "-stream_loop", "-1", "-i", track, "-i", vnorm, "-filter_complex",
+             f"[0:a]atrim=0:{total + 0.5:.3f},aresample=44100,loudnorm=I=-31:TP=-6[m];"
+             "[m][1:a]sidechaincompress=threshold=0.05:ratio=3:attack=40:release=700,"
+             f"afade=t=out:st={max(0.0, total - 1.2):.3f}:d=1.2[b]", "-map", "[b]", "-ac", "2", "-t",
+             f"{total + 0.5:.3f}", bed])
+        ins += ["-i", bed]
+        fc += "[1:a][2:a]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[a]"
     else:
-        fc += "[sc]anullsink;[vo]alimiter=limit=0.95[a]"
+        fc += "[1:a]alimiter=limit=0.95[a]"
     run(["ffmpeg", "-y", "-v", "error", *ins, "-filter_complex", fc, "-map", "[v]", "-map", "[a]",
          "-t", f"{total:.2f}", "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-c:a", "aac", "-b:a", "160k",
          "-movflags", "+faststart", out])
+    # never publish a Short whose ending is silent
+    end_db = mean_volume(out, outro["start"], outro["end"])
+    log(f"Outro voice level in the final Short: {end_db:.1f} dB")
+    if end_db < -40:
+        raise RuntimeError(f"the last line ('{outro['text']}') is silent in the final video ({end_db:.1f} dB)")
     s["seg_start"] = seg_start
     log(f"Short {k + 1} ready: {out.name} ({total:.1f}s, {s['format']}, hook {s['hook_style']}, "
         f"tools {', '.join(t['name'] for t in s['tools'])})")
