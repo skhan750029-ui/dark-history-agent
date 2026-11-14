@@ -89,7 +89,11 @@ jobs:
           for try in 1 2 3; do
             git fetch -q origin "$GITHUB_REF_NAME"
             git reset -q --hard "origin/$GITHUB_REF_NAME"
-            for f in topics_done.txt upload_log.csv topics_log.csv topic_views.csv; do
+            # files only this workflow writes (runs never overlap): this run's copy is the newest
+            for f in topics_log.csv next_topic.json series_playlists.csv; do
+              if [ -f "/tmp/run-data/$f" ]; then cp "/tmp/run-data/$f" "data/$f"; fi
+            done
+            for f in topics_done.txt upload_log.csv topic_views.csv; do
               [ -f "/tmp/run-data/$f" ] || continue
               touch "data/$f"
               grep -vxF -f "data/$f" "/tmp/run-data/$f" >> "data/$f" || true
