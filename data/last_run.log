@@ -1,67 +1,76 @@
-[19:13:32] YouTube views for 'Lusitania sinking': best 13,697,711, 17 videos over 100k
-[19:13:32] Topic (evergreen): Lusitania - best YouTube video 13,697,711 views, 17 over 100k
-[19:13:33] Facts source: Wikipedia 'Sinking of RMS Lusitania' (99808 chars)
-[19:13:33] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
-[19:13:37] AI writer ok: groq openai/gpt-oss-120b
-[19:13:37] Topic: Lusitania (evergreen) | Lusitania: The Secret Munitions That Triggered Its Fatal | angle: The hidden war munitions in Lusitania’s hold caused the massive second explosion that sank her in 18 minutes
-[19:13:40] Waiting 20s for openai/gpt-oss-120b token budget
-[19:14:04] Chapter 1: 13 scenes
-[19:14:04] Chapter 2: 13 scenes
-[19:14:07] Waiting 27s for openai/gpt-oss-120b token budget
-[19:14:40] Chapter 3: 14 scenes
-[19:14:40] Chapter 4: 13 scenes
-[19:14:43] Waiting 29s for openai/gpt-oss-120b token budget
-[19:15:15] Chapter 5: 13 scenes
-[19:15:18] Waiting 31s for openai/gpt-oss-120b token budget
-[19:15:54] Fact fix line 0: Implies torpedo did not cause sinking, contrary to evidence that torpedo was primary cause and secondary explosion is di
-[19:15:54] Fact fix line 3: States Captain Daniel Dow ignored repeated Admiralty warnings and steered into war zone, not fully supported
-[19:15:54] Fact fix line 5: Claims speed over 21 knots after boiler shutdown, but source says speed reduced to 21 knots, not over
-[19:15:54] Fact fix line 8: Describes cargo as civilian luggage plus secret war supplies, implying secret; source confirms war supplies but not secr
-[19:15:54] Fact fix line 10: Accurately states Royal Naval Reserve Merchant Vessel status, which is supported
-[19:15:54] Fact fix line 12: States U‑boat was 700 metres away at the time of attack; source says U‑20 was 700 metres starboard when torpedo launched
-[19:15:54] Fact fix line 14: Time of U‑20 surfacing not confirmed; source does not specify surfacing at 2:10 am
-[19:15:54] Fact fix line 30: Memo dated 12 April 1915 signed by Admiral Sir Henry Oliver not supported by source
-[19:15:54] Fact fix line 31: Claims crew were told to hide munitions and seal hold with heavy steel door; not supported
-[19:15:54] Fact fix line 32: Telegram warning to Schwieger on 6 May 1915 not supported
-[19:15:54] Fact fix line 41: Board of Trade final report dated 19 June 1915 confirming secondary explosion origin not supported; source says investig
-[19:15:54] Fact fix line 42: Scientists calculating blast equivalent to small bomb not supported by source
-[19:15:54] Fact fix line 47: Senator Robert La Follette leading American inquiry on 14 July 1915 not supported; source mentions American inquiry but 
-[19:15:54] Fact fix line 48: Claim that U.S. Navy found brass fuses fused to hull not supported
-[19:15:54] Fact fix line 50: Telegram from 5 May 1915 signed by Winston Churchill ordering speed not supported
-[19:15:54] Fact fix line 51: Historians now agree secondary blast decisive factor; source says mainstream historians reject such theories
-[19:15:54] Fact fix line 55: Implies Schwieger and U‑20 slipped away never imagining storm; speculative
-[19:15:54] Fact fix line 57: Radio families gathering on 9 May 1915 hearing reporter describing ship split; not supported
-[19:15:54] Fact fix line 58: President Wilson's note to Berlin on 12 May 1915 demanding apology and compensation for 128 American dead is not detaile
-[19:15:54] Fact fix line 60: Propaganda posters in London shouting "German guilt!" while cargo stayed hidden; partially supported but cargo secrecy n
-[19:15:54] Fact fix line 62: Congressional hearing on 25 May 1915 with Admiral William Sims testifying Lusitania carried war material; source does no
-[19:15:54] Fact fix line 65: Divers reached wreck in 1982 confirming ammunition causing second blast; source does not mention 1982 dive or definitive
-[19:15:54] Fact check: 22 line(s) corrected
-[19:15:54] Story written with 5 AI requests
-[19:15:54] Voice for 67 scenes...
-[19:17:13] Voice: google, 5 requests for 67 scenes
-[19:17:13] Narration: 9.3 min
-[19:17:41] Caption sync: 1274/1343 words matched to the voice
-[19:17:41] Visuals...
-[19:17:49] Visuals 1/67
-[19:18:30] Visuals 11/67
-[19:18:54] Visuals 21/67
-[19:19:17] Visuals 31/67
-[19:19:46] Visuals 41/67
-[19:20:15] Visuals 51/67
-[19:20:39] Visuals 61/67
-[19:20:52] Visuals for 67/67 scenes - historical film 2, stock video 41, archive photos 19, AI pictures 5
-[19:20:52] Scene clips...
-[19:20:57] Clip 1/67
-[19:21:49] Clip 11/67
-[19:22:34] Clip 21/67
-[19:23:25] Clip 31/67
-[19:24:22] Clip 41/67
-[19:25:16] Clip 51/67
-[19:26:00] Clip 61/67
-[19:26:48] Music download failed 'Spacial Winds': HTTP Error 404: Not Found
-[19:26:49] Music: track.mp3 ['Music: "Unseen Horrors" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
-[19:30:02] Sound effects: bubble hiss, chalk scratching, chalk squeak, clock ticking, crackling fire, crackling radio, creaking wood, crowd murmur, dark drone, deck creak, deep boom, deep rumble, deep water, deep water echo, distant explosion echo, distant thunder, echoing metal, engine rumble, fire roar, footsteps wood, gav
-[19:30:06] Final long render...
-[19:56:50] Short ready: short0.mp4 (57.1s, hook=yes, loop=yes)
-[19:58:15] Short ready: short1.mp4 (51.5s, hook=yes, loop=yes)
-[19:58:17] Long video ready: 9.3 min, 2 shorts
+[19:59:19] YouTube views for 'Lusitania sinking': best 13,698,110, 17 videos over 100k
+[19:59:19] Topic (evergreen): Lusitania - best YouTube video 13,698,110 views, 17 over 100k
+[19:59:19] Facts source: Wikipedia 'Sinking of RMS Lusitania' (99808 chars)
+[19:59:19] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[19:59:22] AI writer ok: groq openai/gpt-oss-120b
+[19:59:22] Topic: Lusitania (evergreen) | Lusitania: The Secret Munitions That Made It a Bomb | angle: The hidden war‑munitions cargo on Lusitania caused the catastrophic second explosion that sealed its fate
+[19:59:25] Waiting 20s for openai/gpt-oss-120b token budget
+[19:59:50] Chapter 1: 13 scenes
+[19:59:50] Chapter 2 only 210 of ~330 words, asking for the full length
+[19:59:53] Waiting 34s for openai/gpt-oss-120b token budget
+[20:00:31] Chapter 2: 13 scenes
+[20:00:34] Waiting 34s for openai/gpt-oss-120b token budget
+[20:01:13] Chapter 3 only 209 of ~330 words, asking for the full length
+[20:01:16] Waiting 24s for openai/gpt-oss-120b token budget
+[20:01:44] Chapter 3: 13 scenes
+[20:01:44] Chapter 4: 13 scenes
+[20:01:47] Waiting 30s for openai/gpt-oss-120b token budget
+[20:02:20] Chapter 5: 13 scenes
+[20:02:23] Waiting 39s for openai/gpt-oss-120b token budget
+[20:03:07] Fact fix line 0: Implies secret cargo turned liner into a bomb; the cargo was war supplies but not a bomb and its role is disputed.
+[20:03:07] Fact fix line 1: Incorrect departure date; Lusitania left New York on April 27, 1915, not May 7.
+[20:03:07] Fact fix line 4: States four million rifle rounds; the source says about 4.2 million, not exactly four million.
+[20:03:07] Fact fix line 6: Captain’s name is Daniel Dow, but he was not the captain; Captain William Thomas Turner was in command.
+[20:03:07] Fact fix line 14: Time of attack was about 2:10 am local time, but the periscope was 700 metres to starboard of the Old Head of Kinsale, n
+[20:03:07] Fact fix line 16: Exact launch distance of 700 metres is not confirmed; the source only gives the U‑boat’s position, not torpedo range.
+[20:03:07] Fact fix line 19: Attribution of second blast to cargo is presented as fact; investigations were inconclusive and the role of ammunition r
+[20:03:07] Fact fix line 22: No historical record of a journalist named Edward B. Baxter; this appears invented.
+[20:03:07] Fact fix line 23: Board of Trade inquiry did not note a “strange smell of cordite” or a bright flash; such details are not in the source.
+[20:03:07] Fact fix line 27: Repeats earlier inaccurate details and adds unfounded description of captain’s actions.
+[20:03:07] Fact fix line 30: Claims ammunition was packed months earlier under Admiralty watch; source does not specify timing or direct Admiralty su
+[20:03:07] Fact fix line 38: Claims Board of Trade downplayed ammunition’s role and hinted at “unexplained factors”; source says inquiries were obstr
+[20:03:07] Fact fix line 44: States British government classified the cargo manifest; the source notes debates and secrecy but not a formal classific
+[20:03:07] Fact fix line 46: Claims Churchill ordered a sanitized report omitting the secondary explosion; not supported by source.
+[20:03:07] Fact fix line 48: Mentions a secret telegram dated 20 May 1915 warning the U.S.; no such telegram is documented in the source.
+[20:03:07] Fact fix line 49: U.S. Navy’s final assessment citing a “catastrophic internal explosion” is not in source; the source says investigations
+[20:03:07] Fact fix line 54: Claims modern sonar shows dense metal clusters confirming massive ammunition stores; not supported by source.
+[20:03:07] Fact fix line 55: States divers recovered brass percussion fuses; source does not mention such recovery.
+[20:03:07] Fact fix line 58: Attributes 2023 sonar findings to Professor Robert Ballard; Ballard is not known to have made such announcements.
+[20:03:07] Fact fix line 61: Quantifies 173 tons of ammunition detonating and shattering the ship; causation is not definitively established.
+[20:03:07] Fact fix line 62: States loss of life surged to over 1,200 souls in minutes; source gives 1,960 aboard, 763 survivors (≈1,197 dead) but si
+[20:03:07] Fact fix line 63: Says United States felt shock in its ports and newspapers screamed for justice; while true sentiment existed, the phrasi
+[20:03:07] Fact fix line 64: Claims the outrage helped push Wilson toward war on 6 April 1917; source notes contribution but not direct causation.
+[20:03:07] Fact check: 23 line(s) corrected
+[20:03:07] Story written with 7 AI requests
+[20:03:07] Voice for 66 scenes...
+[20:04:32] Voice: google, 5 requests for 66 scenes
+[20:04:32] Narration: 9.8 min
+[20:04:53] Caption sync: 1394/1444 words matched to the voice
+[20:04:53] Visuals...
+[20:04:59] Visuals 1/66
+[20:05:16] Visuals 11/66
+[20:05:41] Visuals 21/66
+[20:06:09] Visuals 31/66
+[20:06:37] Visuals 41/66
+[20:06:51] Visuals 51/66
+[20:07:11] Visuals 61/66
+[20:07:20] Visuals for 66/66 scenes - historical film 1, stock video 47, archive photos 16, AI pictures 2
+[20:07:20] Scene clips...
+[20:07:23] Clip 1/66
+[20:07:54] Clip 11/66
+[20:08:46] Clip 21/66
+[20:09:43] Clip 31/66
+[20:10:50] Clip 41/66
+[20:11:29] Clip 51/66
+[20:12:05] Clip 61/66
+[20:12:26] Music: track.mp3 ['Music: "Lightless Dawn" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
+[20:15:14] Sound effects: audience murmur, boat engines, brush strokes, clock ticking, crackling fire, crash roar, crashing metal, creaking wood, crowd murmur, crowd murmuring, dark drone, deep boom, deep water, distant thunder, distant waves, drum roll, engine rumble, explosion boom, explosion echo, fire crackle, footsteps 
+[20:15:18] Final long render...
+[20:36:13] Short ready: short0.mp4 (51.9s, hook=yes, loop=yes)
+[20:37:28] Short ready: short1.mp4 (54.2s, hook=yes, loop=yes)
+[20:37:30] Long video ready: 9.8 min, 2 shorts
+[20:37:44] Uploaded https://youtu.be/nEISTHiSThg (public)
+[20:37:44] Thumbnail not set (verify channel at youtube.com/verify): HTTP Error 403: Forbidden
+[20:37:44] Subtitles not uploaded: HTTP 403 b'{\n  "error": {\n    "code": 403,\n    "message": "Request had insufficient authentication scopes.",\n    "errors": [\n      {\n        "message": "Insufficient Permission",\n        "domain": "global",\n    ' - the YouTube refresh token needs the youtube.force-ssl scope for this
+[20:37:46] Uploaded https://youtu.be/NELAJ6bJGog (private, publishes 2026-11-15T00:37:44Z)
+[20:37:49] Uploaded https://youtu.be/kKP_5n3LF9k (private, publishes 2026-11-15T05:37:44Z)
