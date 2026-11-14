@@ -579,7 +579,9 @@ def yt_demand(query):
         items = http(url, timeout=30).get("items", [])
         want = topic_word(query)
         titles = {it["id"]["videoId"]: html.unescape(it["snippet"]["title"]) for it in items}
-        titles = {v: t for v, t in titles.items() if want in t.lower()}
+        # real videos about the topic only: no fan edits / Shorts compilations riding on the name
+        titles = {v: t for v, t in titles.items() if want in t.lower()
+                  and not re.search(r"#shorts|#edit|\bedits?\b|#viral|#fyp|sleeping sun|you are my enemy", t, re.I)}
         views = {}
         if titles:
             url = "https://www.googleapis.com/youtube/v3/videos?" + urllib.parse.urlencode(
@@ -680,6 +682,33 @@ def choose_topic(done):
     return pick
 
 
+def fit_title(title, name, angle=""):
+    """A complete title of at most 60 characters that starts with the famous name (asks the AI to shorten a
+    long one instead of cutting it mid-phrase)."""
+    title = re.sub(r"\s+", " ", title).strip()
+    for _ in range(2):
+        if len(title) <= 60:
+            return title
+        try:
+            got = ask_json(f"""Shorten this YouTube title to at most 55 characters. Keep it complete, truthful and
+curious; it must start with "{name}: ". Angle of the video: {angle or '(see title)'}
+Title: {title}
+Return ONLY JSON: {{"title": "..."}}""", keys=("title",), max_tokens=300)
+            new = text(got.get("title"))
+            if new.lower().startswith(name.lower()):
+                title = new
+        except Exception as e:
+            log(f"Title shortening failed: {e}")
+            break
+    if len(title) > 60:  # last resort: end at a natural break, never in the middle of a phrase
+        head = title[:60]
+        cut = max(head.rfind("?"), head.rfind("!"), head.rfind(". "))  # a whole sentence first
+        if cut <= len(name) + 5:
+            cut = max(head.rfind(" - "), head.rfind(","), head.rfind(":"))
+        title = head[:cut + 1].rstrip(" ,-:") if cut > len(name) + 5 else name
+    return title
+
+
 def quote_found(quote, facts):
     """The words (or almost all of them, in order) appear in the source text."""
     import difflib
@@ -693,11 +722,12 @@ def quote_found(quote, facts):
     return m.size >= 0.8 * len(q)
 
 
-def fact_check(scenes, facts):
-    """One AI pass that compares every narration line with the Wikipedia facts and rewrites any line with a
-    name, date, number, place or event the facts do not support."""
+def fact_check(scenes, facts, title=""):
+    """One AI pass that compares every narration line (and the title) with the Wikipedia facts and rewrites
+    any line with a name, date, number, place or event the facts do not support.
+    Returns (lines fixed, corrected title or "")."""
     if not facts:
-        return 0
+        return 0, ""
     numbered = "\n".join(f"{i}. {s['ur']}" for i, s in enumerate(scenes))
     try:
         got = ask_json(f"""You are the fact-checker of a history documentary. Compare EVERY numbered narration line
@@ -708,13 +738,17 @@ facts (or clearly says "according to legend" / "one theory says").
 SOURCE FACTS (Wikipedia):
 {facts}
 
+TITLE: {title}
 NARRATION:
 {numbered}
-Return ONLY JSON: {{"fixes": [{{"line": 3, "problem": "short reason", "text": "corrected line"}}]}}
-(an empty list if everything is supported)""", keys=("fixes",), max_tokens=3000)
+Also check the TITLE: if it states something the facts do not support (or a disputed theory as proven),
+give a corrected title (same start before the colon, max 60 characters, may be a question).
+Return ONLY JSON: {{"fixes": [{{"line": 3, "problem": "short reason", "text": "corrected line"}}],
+"title_fix": "corrected title, or empty if the title is fine"}}
+(an empty fixes list if everything is supported)""", keys=("fixes",), max_tokens=3000)
     except Exception as e:
         log(f"Fact check skipped: {e}")
-        return 0
+        return 0, ""
     n = 0
     for fx in got.get("fixes") or []:
         try:
@@ -727,7 +761,12 @@ Return ONLY JSON: {{"fixes": [{{"line": 3, "problem": "short reason", "text": "c
             scenes[i]["ur"] = new
             n += 1
     log(f"Fact check: {n} line(s) corrected")
-    return n
+    tfix = text(got.get("title_fix"))
+    head = title.split(":")[0].strip().lower()
+    if tfix and tfix != title and len(tfix) <= 60 and tfix.lower().startswith(head):
+        log(f"Fact check: title changed from '{title}' to '{tfix}'")
+        return n, tfix
+    return n, ""
 
 
 VISUAL_RULES = """The picture on screen MUST show what the narration of that scene says, in the era and
@@ -943,7 +982,9 @@ FACTS (Wikipedia - the ONLY facts you may use; nothing from memory):
 {facts[:6000]}
 
 Never invent facts; mark legends and theories clearly as legends/theories. Respect victims: no gore for
-shock, no glorifying violence. {outline_note}
+shock, no glorifying violence. The angle must NOT contradict what the FACTS say most historians or
+investigators concluded: if the angle is a theory, the title asks it as a question or says "theory" -
+never state a disputed theory as proven. {outline_note}
 
 Plan a {minutes:.0f}-minute documentary with {n_ch} chapters, built like the best retention documentaries:
 - COLD OPEN: the very first line is a jolt - a secret or a shocking question with a real name, year or
@@ -991,12 +1032,12 @@ Return ONLY JSON:
         log("Angle quote still not found in the facts - the fact check below will correct the narration")
     outline["topic"], outline["wikipedia"] = name, LAST_WIKI["title"] or pick["wikipedia"]
     outline["kind"], outline["trend_reason"] = pick["kind"], text(pick.get("why"))
+    # the famous name first, so the video is found when people search it; never cut a title mid-phrase
+    title = text(outline.get("title"), name)
+    if not title.lower().startswith(name.lower()):
+        title = f"{name}: " + (re.sub(rf"^\W*{re.escape(name)}\W*", "", title, flags=re.I) or title)
+    outline["title"] = fit_title(title, name, text(outline.get("angle")))
     outline = normalize_outline(outline, n_ch)
-    # the famous name first, so the video is found when people search it
-    if not outline["title"].lower().startswith(name.lower()):
-        rest = re.sub(rf"^\W*{re.escape(name)}\W*", "", outline["title"], flags=re.I) or outline["title"]
-        outline["title"] = f"{name}: {rest}"
-        outline = normalize_outline(outline, n_ch)
     for sh in outline["shorts"]:
         if name.lower() not in sh["title"].lower() and len(name) + 2 + len(sh["title"]) <= 60:
             sh["title"] = f"{name}: {sh['title']}"
@@ -1112,7 +1153,9 @@ Return ONLY JSON with one entry per chapter, in order:
         said = " ".join(s["ur"] for s in scenes if s["chapter"] == i)
         if said and not re.search(r"\b1[0-9]{3}\b|\b20[0-2][0-9]\b", said):
             log(f"Note: chapter {i + 1} has no exact year in it")
-    fact_check(scenes, facts)
+    _, tfix = fact_check(scenes, facts, outline["title"])
+    if tfix:
+        outline["title"] = tfix
     if scenes and scenes[0].get("cold_open"):
         outline["hook"] = scenes[0]["ur"]  # the Shorts and title checks use the corrected cold open
     outline["scenes"] = scenes
@@ -2534,6 +2577,12 @@ def main():
     ap.add_argument("--script")
     a = ap.parse_args()
     DATA.mkdir(exist_ok=True)
+    today = dt.datetime.now(dt.timezone.utc).date().isoformat()
+    log_f = DATA / "upload_log.csv"
+    if (os.getenv("RUN_EVENT") == "schedule" and not (a.no_upload or a.offline or a.script) and log_f.exists()
+            and any(l.startswith(today) and ",long," in l for l in log_f.read_text(encoding="utf-8").splitlines())):
+        log("Today's documentary is already uploaded - this backup run has nothing to do")
+        return
 
     story = json.loads(Path(a.script).read_text(encoding="utf-8")) if a.script else None
     if not story:
