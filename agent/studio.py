@@ -1630,6 +1630,10 @@ SYNTHETIC = {"on": True}  # safe default until gather_visuals has seen what is r
 
 
 def ai_image(prompt, path, seed):
+    # AI pictures are OFF by default (owner's choice: only real footage/photos, so no synthetic-content
+    # label is needed). Repository variable AI_PICTURES = on brings them back as a last resort.
+    if (os.getenv("AI_PICTURES") or "off").strip().lower() != "on":
+        return False
     acc, tok = os.getenv("CF_ACCOUNT_ID"), os.getenv("CF_API_TOKEN")
     if not (acc and tok) or AI_OFF["off"]:
         return False

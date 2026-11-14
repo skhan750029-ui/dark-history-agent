@@ -72,6 +72,7 @@ jobs:
           EDGE_VOICE: ${{ vars.EDGE_VOICE }}
           LONG_MINUTES: ${{ vars.LONG_MINUTES || '11' }}
           RUN_EVENT: ${{ github.event_name }}
+          AI_PICTURES: ${{ vars.AI_PICTURES }}
           TOPIC_MODE: ${{ vars.TOPIC_MODE }}
           MIN_TOP_VIEWS: ${{ vars.MIN_TOP_VIEWS }}
         # the run's log is also saved to data/last_run.log so it can be read without opening Actions
