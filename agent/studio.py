@@ -483,13 +483,251 @@ def wiki_extract(title, chars=4500):
         return ""
     cut = re.search(r"\n==\s*(See also|References|Notes|Further reading|External links|In popular culture)\s*==", txt)
     txt = re.sub(r"\n{2,}", "\n", txt[:cut.start()] if cut else txt)
+    LAST_WIKI["title"] = hits[0]["title"]
     log(f"Facts source: Wikipedia '{hits[0]['title']}' ({len(txt)} chars)")
     return txt[:chars]
 
 
+# =============================================================== TOPIC CHOICE (views first)
+# ~70% famous evergreen topics people search for every day (agent/dark_topics.json), ~30% trending ones.
+# Before a topic is used, YouTube is asked how many views other channels' videos on it get: only topics
+# with a proven record (hundreds of thousands of views) are taken. A topic never repeats within 6 months.
+
+DARK_TOPICS_FILE = Path(__file__).resolve().parent / "dark_topics.json"
+REPEAT_DAYS = int(os.getenv("TOPIC_REPEAT_DAYS") or 183)
+EVERGREEN_SHARE = float(os.getenv("EVERGREEN_SHARE") or 0.7)
+MIN_TOP_VIEWS = int(os.getenv("MIN_TOP_VIEWS") or 500_000)   # best video on the topic
+MIN_100K_VIDEOS = int(os.getenv("MIN_100K_VIDEOS") or 3)     # and several videos over 100k views
+YT_CHECKS = {"left": int(os.getenv("YT_VIEW_CHECKS") or 4), "off": False}  # 100 quota units per new check
+GENERIC = {"mystery", "curse", "history", "death", "what", "really", "true", "story", "lost", "disappearance",
+           "murder", "murders", "disaster", "sinking", "event", "incident", "the", "ghost", "ship", "treasure"}
+LAST_WIKI = {"title": ""}
+
+
+def topic_log():
+    f = DATA / "topics_log.csv"
+    if not f.exists():
+        return []
+    import csv
+    with open(f, encoding="utf-8", newline="") as fh:
+        return list(csv.DictReader(fh))
+
+
 def used_topics():
+    """Old topics (topics_done.txt, from before the 6-month rule) + every topic of the last 6 months."""
     f = DATA / "topics_done.txt"
-    return [l.strip() for l in f.read_text(encoding="utf-8").splitlines() if l.strip()] if f.exists() else []
+    old = [l.strip() for l in f.read_text(encoding="utf-8").splitlines() if l.strip()] if f.exists() else []
+    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=REPEAT_DAYS)
+    recent = []
+    for r in topic_log():
+        try:
+            if dt.datetime.fromisoformat(r["date"]) >= since:
+                recent += [r.get("topic", ""), r.get("wikipedia", "")]
+        except (KeyError, ValueError):
+            continue
+    return old + [t for t in recent if t]
+
+
+def pick_mode():
+    """'evergreen' until ~70% of the last 10 videos are famous topics, otherwise 'trending'."""
+    forced = (os.getenv("TOPIC_MODE") or "").strip().lower()
+    if forced in ("evergreen", "trending"):
+        return forced
+    rows = topic_log()[-10:]
+    if not rows:
+        return "evergreen"
+    share = sum(r.get("kind") == "evergreen" for r in rows) / len(rows)
+    return "evergreen" if share < EVERGREEN_SHARE else "trending"
+
+
+def view_cache():
+    f = DATA / "topic_views.csv"
+    out = {}
+    if f.exists():
+        import csv
+        with open(f, encoding="utf-8", newline="") as fh:
+            for r in csv.reader(fh):
+                if len(r) >= 5:
+                    out[r[0].lower()] = r  # later lines win
+    return out
+
+
+def topic_word(query):
+    """The word a video title must contain to count as a video about this topic (usually the name)."""
+    words = [w for w in re.findall(r"[a-z0-9']+", query.lower()) if len(w) >= 4 and w not in GENERIC]
+    return words[0] if words else query.lower().split()[0]
+
+
+def yt_demand(query):
+    """Views other channels get on this topic: {"top", "n100k", "titles"} or None when YouTube can't be asked.
+    Results are kept 60 days in data/topic_views.csv so the daily quota is hardly touched."""
+    hit = view_cache().get(query.lower())
+    if hit:
+        try:
+            if (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(hit[1])).days < 60:
+                return {"top": int(hit[2]), "n100k": int(hit[3]), "titles": [t for t in hit[4].split(" | ") if t]}
+        except ValueError:
+            pass
+    key = os.getenv("YT_API_KEY") or os.getenv("GOOGLE_TTS_KEY")
+    if not key or YT_CHECKS["off"] or YT_CHECKS["left"] <= 0:
+        return None
+    YT_CHECKS["left"] -= 1
+    try:
+        url = "https://www.googleapis.com/youtube/v3/search?" + urllib.parse.urlencode({
+            "part": "snippet", "type": "video", "order": "viewCount", "q": query, "maxResults": 20,
+            "relevanceLanguage": "en", "key": key})
+        items = http(url, timeout=30).get("items", [])
+        want = topic_word(query)
+        titles = {it["id"]["videoId"]: html.unescape(it["snippet"]["title"]) for it in items}
+        titles = {v: t for v, t in titles.items() if want in t.lower()}
+        views = {}
+        if titles:
+            url = "https://www.googleapis.com/youtube/v3/videos?" + urllib.parse.urlencode(
+                {"part": "statistics", "id": ",".join(titles), "key": key})
+            views = {v["id"]: int(v["statistics"].get("viewCount", 0)) for v in http(url, timeout=30).get("items", [])}
+    except urllib.error.HTTPError as e:
+        YT_CHECKS["off"] = True
+        log(f"YouTube views check off (HTTP {e.code}) - add a YT_API_KEY secret with YouTube Data API v3 enabled")
+        return None
+    except Exception as e:
+        log(f"YouTube views check failed for '{query}': {e}")
+        return None
+    ranked = sorted(titles, key=lambda v: -views.get(v, 0))
+    d = {"top": views.get(ranked[0], 0) if ranked else 0, "n100k": sum(1 for v in ranked if views.get(v, 0) >= 100_000),
+         "titles": [titles[v] for v in ranked[:5]]}
+    import csv
+    with open(DATA / "topic_views.csv", "a", encoding="utf-8", newline="") as fh:
+        csv.writer(fh).writerow([query, dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), d["top"],
+                                 d["n100k"], " | ".join(t.replace("|", "/") for t in d["titles"])])
+    log(f"YouTube views for '{query}': best {d['top']:,}, {d['n100k']} videos over 100k")
+    return d
+
+
+def proven(d):
+    return bool(d) and d["top"] >= MIN_TOP_VIEWS and d["n100k"] >= MIN_100K_VIDEOS
+
+
+def evergreen_pick(done):
+    items = json.loads(DARK_TOPICS_FILE.read_text(encoding="utf-8"))["topics"]
+    fresh = [t for t in items if not is_used(t["name"], done) and not is_used(t["wikipedia"], done)
+             and t["name"] not in REJECTED]
+    if not fresh:
+        raise RuntimeError("every evergreen topic was used in the last 6 months - add more to dark_topics.json")
+    random.Random(dt.date.today().toordinal() + len(REJECTED)).shuffle(fresh)
+    best = None
+    for t in fresh[:12]:
+        d = yt_demand(t["query"])
+        if d is None:
+            if YT_CHECKS["off"] or not (os.getenv("YT_API_KEY") or os.getenv("GOOGLE_TTS_KEY")):
+                log(f"Views check unavailable - using the well-known topic {t['name']}")
+                return {**t, "kind": "evergreen", "demand": None}
+            continue  # out of checks for today: only cached topics are compared
+        if proven(d):
+            return {**t, "kind": "evergreen", "demand": d}
+        if not best or d["top"] > best["demand"]["top"]:
+            best = {**t, "kind": "evergreen", "demand": d}
+    if best:
+        log(f"No checked evergreen topic reached the views bar - taking the strongest: {best['name']}")
+        return best
+    return {**fresh[0], "kind": "evergreen", "demand": None}
+
+
+def trending_pick(done):
+    """The AI proposes 4 stories from today's trend signals; the first with a proven views record wins."""
+    avoid = "\n".join(f"- {t}" for t in done[-300:] + REJECTED) or "- (none yet)"
+    got = ask_json(f"""You choose topics for "{CHANNEL}", a YouTube channel of true dark and mysterious history.
+TRENDING SIGNALS (free public data collected today):
+{trend_signals() or '(no trend data today)'}
+
+Propose 4 real, specific, verifiable dark-history stories that match these signals AND that many people
+already search for on YouTube (a known name, event or place - not an obscure local incident). Not any of:
+{avoid}
+Skip living people, wars or political conflicts that are still going on, massacres, race riots, mass
+shootings and any racial, religious or political violence.
+Return ONLY JSON: {{"topics": [{{"name": "short famous name of the story (2-4 words)",
+"wikipedia": "exact English Wikipedia article title", "query": "what people type on YouTube to find it",
+"why": "which signal it matches"}}]}}""", keys=("topics",), max_tokens=1200)
+    for c in got.get("topics") or []:
+        if not isinstance(c, dict):
+            continue
+        c = {k: text(c.get(k)) for k in ("name", "wikipedia", "query", "why")}
+        c["name"] = c["name"] or c["wikipedia"]
+        if not c["name"] or is_used(c["name"], done) or SENSITIVE.search(f"{c['name']} {c['wikipedia']}"):
+            continue
+        d = yt_demand(c["query"] or c["name"])
+        if d is None and not YT_CHECKS["off"] and YT_CHECKS["left"] > 0:
+            continue
+        if d is None or proven(d):
+            return {**c, "wikipedia": c["wikipedia"] or c["name"], "kind": "trending", "demand": d}
+        log(f"Trending topic '{c['name']}' skipped: not enough views on YouTube (best {d['top']:,})")
+    return None
+
+
+def choose_topic(done):
+    mode = pick_mode()
+    pick = None
+    if mode == "trending":
+        try:
+            pick = trending_pick(done)
+        except Exception as e:
+            log(f"Trending topic search failed: {e}")
+        if not pick:
+            log("No trending topic with a proven views record today - using a famous evergreen topic")
+    pick = pick or evergreen_pick(done)
+    d = pick.get("demand")
+    log(f"Topic ({pick['kind']}): {pick['name']}"
+        + (f" - best YouTube video {d['top']:,} views, {d['n100k']} over 100k" if d else " - views not checked"))
+    return pick
+
+
+def quote_found(quote, facts):
+    """The words (or almost all of them, in order) appear in the source text."""
+    import difflib
+    norm = lambda s: re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", (s or "").lower())).strip()
+    q, f = norm(quote), norm(facts)
+    if len(q.split()) < 4:
+        return False
+    if q in f:
+        return True
+    m = difflib.SequenceMatcher(None, f, q, autojunk=False).find_longest_match(0, len(f), 0, len(q))
+    return m.size >= 0.8 * len(q)
+
+
+def fact_check(scenes, facts):
+    """One AI pass that compares every narration line with the Wikipedia facts and rewrites any line with a
+    name, date, number, place or event the facts do not support."""
+    if not facts:
+        return 0
+    numbered = "\n".join(f"{i}. {s['ur']}" for i, s in enumerate(scenes))
+    try:
+        got = ask_json(f"""You are the fact-checker of a history documentary. Compare EVERY numbered narration line
+with the SOURCE FACTS. A line is wrong if it states a name, date, number, place, quote or event that the
+facts do not support, or presents a legend or theory as proven fact. Dramatic wording is fine; invented
+facts are not. For each wrong line give a corrected line of similar length that only uses supported
+facts (or clearly says "according to legend" / "one theory says").
+SOURCE FACTS (Wikipedia):
+{facts}
+
+NARRATION:
+{numbered}
+Return ONLY JSON: {{"fixes": [{{"line": 3, "problem": "short reason", "text": "corrected line"}}]}}
+(an empty list if everything is supported)""", keys=("fixes",), max_tokens=3000)
+    except Exception as e:
+        log(f"Fact check skipped: {e}")
+        return 0
+    n = 0
+    for fx in got.get("fixes") or []:
+        try:
+            i = int(fx.get("line"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        new = text(fx.get("text"))
+        if 0 <= i < len(scenes) and new and 0.5 <= len(new) / max(1, len(scenes[i]["ur"])) <= 1.6:
+            log(f"Fact fix line {i}: {text(fx.get('problem'))[:120]}")
+            scenes[i]["ur"] = new
+            n += 1
+    log(f"Fact check: {n} line(s) corrected")
+    return n
 
 
 VISUAL_RULES = """The picture on screen MUST show what the narration of that scene says, in the era and
@@ -674,27 +912,38 @@ def scene_list(ch):
 def write_story(minutes):
     """3-4 AI requests in total: 1 outline (picks a trending topic) + the narration 2 chapters at a time."""
     done = used_topics()
-    avoid = "\n".join(f"- {t}" for t in done[-300:] + REJECTED) or "- (none yet)"
     n_ch = max(4, round(minutes / 2.3))
-    trends = trend_signals() or "(no trend data today - pick a story with strong search interest)"
-    outline = ask_json(f"""You are the head writer of "{CHANNEL}", a faceless YouTube channel that tells
-true, little-known, dark and mysterious stories from real history (gripping narrator, suspense,
-cliffhangers, a final twist). Today is {dt.date.today():%d %B %Y}.
+    pick = choose_topic(done)
+    name = pick["name"]
+    facts = wiki_extract(pick["wikipedia"] or name, chars=8000)
+    if len(facts) < 1500:
+        REJECTED.append(name)
+        raise RuntimeError(f"not enough source facts for {name} ({len(facts)} chars) - picking another topic")
+    rivals = "\n".join(f'- "{t}"' for t in (pick.get("demand") or {}).get("titles", [])) or "- (not checked)"
+    if pick["kind"] == "evergreen":
+        kind_note = f"""This is a FAMOUS story that people search for on YouTube every day, so many viewers know the
+basic version. Give it a NEW ANGLE that is still 100% true: one little-known detail, a newer theory or
+finding, or "what really happened" - and the angle MUST come from the FACTS below. The most viewed
+videos on this topic (do NOT copy their angle or titles):
+{rivals}"""
+    else:
+        kind_note = f"""This story is getting attention right now ({text(pick.get('why'), 'trending')}). Popular
+videos on it (do NOT copy their angle or titles):
+{rivals}"""
+    outline_note = ""
+    for attempt in range(2):
+        outline = ask_json(f"""You are the head writer of "{CHANNEL}", a faceless YouTube channel that tells
+true dark and mysterious stories from real history (gripping narrator, suspense, cliffhangers, a final
+twist). Today is {dt.date.today():%d %B %Y}.
 
-TRENDING SIGNALS (free public data collected today):
-{trends}
+TODAY'S STORY (already chosen - do not change it): {name} (Wikipedia: "{LAST_WIKI['title'] or pick['wikipedia']}")
+{kind_note}
 
-Pick ONE real, specific, verifiable dark or mysterious historical story that is most likely to get
-views NOW: best is a story from the Wikipedia or anniversary lists above, or a story of the same kind
-as the YouTube videos that are getting views. Curses, disappearances, disasters, cover-ups, strange
-deaths, forgotten tragedies, bizarre experiments, lost places.
-It must NOT be any of these already-used topics:
-{avoid}
-Never invent facts; mark legends as legends. Respect victims: no gore for shock, no glorifying violence.
-Skip stories about living people and stories tied to wars or political conflicts that are still going on.
-Also skip massacres, race riots, mass shootings and any racial, religious or political violence.
-Best fits: unsolved mysteries, disappearances, ghost ships, lost expeditions, strange deaths,
-disasters and accidents, curses and legends, bizarre experiments, forgotten crimes, abandoned places.
+FACTS (Wikipedia - the ONLY facts you may use; nothing from memory):
+{facts[:6000]}
+
+Never invent facts; mark legends and theories clearly as legends/theories. Respect victims: no gore for
+shock, no glorifying violence. {outline_note}
 
 Plan a {minutes:.0f}-minute documentary with {n_ch} chapters, built like the best retention documentaries:
 - COLD OPEN: the very first line is a jolt - a secret or a shocking question with a real name, year or
@@ -709,18 +958,18 @@ the scene mid-action), shock fact, direct challenge ("You have heard this story 
 2 points each for: understood in one listen (under 20 words) / creates a question or tension / specific
 (name, date, place) / matches the title + thumbnail promise / true and verifiable. Use the best as "hook";
 if none scores 7+, rewrite until one does.
-TITLE + THUMBNAIL are ONE pair: title under 60 characters (fits on a phone); thumbnail text 2-4 words that
+TITLE + THUMBNAIL are ONE pair: the title STARTS with the famous name exactly - "{name}: " - then the angle
+(so people searching the name find it), under 60 characters in total; thumbnail text 2-4 words that
 do NOT repeat any title word and add a second piece of curiosity; together one clear promise the video keeps.
 Return ONLY JSON:
-{{"topic": "short English name of the story",
+{{"angle": "the new angle of this video in one sentence (little-known detail / newer theory / what really happened)",
+  "angle_quote": "8-25 words copied EXACTLY from the FACTS that support the angle",
   "hooks": [{{"type": "curiosity gap", "text": "...", "score": 8}}, "... 5 in total"],
   "hook": "the best-scoring hook (rules above)",
   "hook_query": "2-4 English words for the most dramatic stock-footage shot to open the video",
   "hook_film": "2-4 English words for real historical film of this event on Wikimedia Commons, or empty",
   "question": "the central question of the video",
-  "wikipedia": "exact title of the English Wikipedia article about this story",
-  "trend_reason": "which trending signal this matches and why it will get views",
-  "title": "English YouTube title, under 60 chars, curiosity + truthful, may use one CAPS word",
+  "title": "{name}: <angle>, under 60 chars in total, curiosity + truthful",
   "thumbnail_text": "2-4 English words, none of them in the title",
   "setting": "visual setting for all pictures: year/era, place, period details",
   "thumbnail_prompt": "English prompt for a dramatic photorealistic cinematic thumbnail image of the story's key moment, no text",
@@ -728,20 +977,36 @@ Return ONLY JSON:
   "tags": ["8-15 English SEO tags mixing broad (dark history, unsolved mystery) and specific (event, place, year)"],
   "hashtags": ["#darkhistory", "#mystery", "one specific hashtag - 3 in total"],
   "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells, with exact names, dates, places"}}],
-  "shorts": [{{"chapter": 0, "title": "English Shorts title max 60 chars",
+  "shorts": [{{"chapter": 0, "title": "Shorts title max 60 chars, starting with '{name}' when it fits",
               "hook": "first line of the Short: a shocking question or secret from this chapter, max 15 words",
               "loop": "last line of the Short, max 15 words, that flows straight back into the hook when the Short replays (e.g. ends with '...and that is exactly why' or a half-sentence the hook completes)"}},
              {{"chapter": 2, "title": "...", "hook": "...", "loop": "..."}}]
 }}""", keys=("chapters",), max_tokens=4000)
+        if quote_found(text(outline.get("angle_quote")), facts):
+            break
+        log(f"Angle not backed by the facts ({text(outline.get('angle'))[:100]}) - asking again")
+        outline_note = ("Your last angle was not backed by the FACTS. Choose an angle you can support with words "
+                        "copied exactly from the FACTS.")
+    else:
+        log("Angle quote still not found in the facts - the fact check below will correct the narration")
+    outline["topic"], outline["wikipedia"] = name, LAST_WIKI["title"] or pick["wikipedia"]
+    outline["kind"], outline["trend_reason"] = pick["kind"], text(pick.get("why"))
     outline = normalize_outline(outline, n_ch)
-    if is_used(outline["topic"], done):
-        REJECTED.append(outline["topic"])
-        raise RuntimeError(f"repeated topic: {outline['topic']}")
+    # the famous name first, so the video is found when people search it
+    if not outline["title"].lower().startswith(name.lower()):
+        rest = re.sub(rf"^\W*{re.escape(name)}\W*", "", outline["title"], flags=re.I) or outline["title"]
+        outline["title"] = f"{name}: {rest}"
+        outline = normalize_outline(outline, n_ch)
+    for sh in outline["shorts"]:
+        if name.lower() not in sh["title"].lower() and len(name) + 2 + len(sh["title"]) <= 60:
+            sh["title"] = f"{name}: {sh['title']}"
+    src = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(outline['wikipedia'].replace(' ', '_'))}"
+    if "wikipedia.org" not in outline["description"]:
+        outline["description"] = outline["description"].rstrip() + f"\n\nSource: {src}"
     if SENSITIVE.search(" ".join([outline["topic"], outline["title"], outline["wikipedia"]])):
-        REJECTED.append(outline["topic"])
-        raise RuntimeError(f"topic tied to a living conflict, picking another: {outline['topic']}")
-    log(f"Topic: {outline['topic']} | {outline['title']} | why: {outline.get('trend_reason', '')[:160]}")
-    facts = wiki_extract(outline.get("wikipedia") or outline["topic"])
+        REJECTED.append(name)
+        raise RuntimeError(f"topic tied to a living conflict, picking another: {name}")
+    log(f"Topic: {name} ({pick['kind']}) | {outline['title']} | angle: {text(outline.get('angle'))[:160]}")
 
     LANG_RULE = ("simple, clear spoken English like a gripping documentary narrator (short everyday "
                  "words, easy for non-native listeners; no complicated vocabulary)." if LANG == "en" else
@@ -847,6 +1112,9 @@ Return ONLY JSON with one entry per chapter, in order:
         said = " ".join(s["ur"] for s in scenes if s["chapter"] == i)
         if said and not re.search(r"\b1[0-9]{3}\b|\b20[0-2][0-9]\b", said):
             log(f"Note: chapter {i + 1} has no exact year in it")
+    fact_check(scenes, facts)
+    if scenes and scenes[0].get("cold_open"):
+        outline["hook"] = scenes[0]["ur"]  # the Shorts and title checks use the corrected cold open
     outline["scenes"] = scenes
     log(f"Story written with {LLM_STATE['calls']} AI requests")
     return outline
@@ -2269,7 +2537,7 @@ def main():
 
     story = json.loads(Path(a.script).read_text(encoding="utf-8")) if a.script else None
     if not story:
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 story = write_story(LONG_MINUTES)
                 break
@@ -2321,8 +2589,15 @@ def main():
                 log(f"Short upload failed: {e}")
 
     if results:  # a --no-upload test run does not use up the topic
-        with open(DATA / "topics_done.txt", "a", encoding="utf-8") as f:
-            f.write(story["topic"].strip() + "\n")
+        import csv
+        new = not (DATA / "topics_log.csv").exists()
+        with open(DATA / "topics_log.csv", "a", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(["date", "topic", "wikipedia", "kind", "title", "angle", "video"])
+            w.writerow([dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), story["topic"].strip(),
+                        story.get("wikipedia", ""), story.get("kind", "trending"), story["title"],
+                        text(story.get("angle"))[:200], f"https://youtu.be/{results[0][3]}"])
         with open(DATA / "upload_log.csv", "a", encoding="utf-8") as f:
             for kind, t, st, vid in results:
                 f.write(f"{dt.datetime.now(dt.timezone.utc).isoformat()},{kind},\"{t}\",{st},https://youtu.be/{vid}\n")

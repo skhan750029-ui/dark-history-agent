@@ -69,7 +69,12 @@ jobs:
           TTS_RATE: ${{ vars.TTS_RATE }}
           EDGE_VOICE: ${{ vars.EDGE_VOICE }}
           LONG_MINUTES: ${{ vars.LONG_MINUTES || '11' }}
-        run: python agent/studio.py ${{ inputs.upload == 'no' && '--no-upload' || '' }}
+          TOPIC_MODE: ${{ vars.TOPIC_MODE }}
+          MIN_TOP_VIEWS: ${{ vars.MIN_TOP_VIEWS }}
+        # the run's log is also saved to data/last_run.log so it can be read without opening Actions
+        run: |
+          set -o pipefail
+          python -u agent/studio.py ${{ inputs.upload == 'no' && '--no-upload' || '' }} 2>&1 | tee data/last_run.log
       - name: Save topic list and log
         if: always()
         # Re-applies this run's data on top of the newest branch instead of rebasing, so a run that started
@@ -81,12 +86,13 @@ jobs:
           for try in 1 2 3; do
             git fetch -q origin "$GITHUB_REF_NAME"
             git reset -q --hard "origin/$GITHUB_REF_NAME"
-            for f in topics_done.txt upload_log.csv; do
+            for f in topics_done.txt upload_log.csv topics_log.csv topic_views.csv; do
               [ -f "/tmp/run-data/$f" ] || continue
               touch "data/$f"
               grep -vxF -f "data/$f" "/tmp/run-data/$f" >> "data/$f" || true
             done
             [ -d /tmp/run-data/previews ] && mkdir -p data/previews && cp /tmp/run-data/previews/* data/previews/
+            [ -f /tmp/run-data/last_run.log ] && cp /tmp/run-data/last_run.log data/
             git add data/
             git diff --cached --quiet && break
             git commit -q -m "Log daily video" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break
