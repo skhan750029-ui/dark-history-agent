@@ -1763,7 +1763,8 @@ def gather_visuals(scenes, work, offline, durs):
             log(f"Visuals {i + 1}/{len(scenes)}")
     real = [s for s in scenes if s.get("asset")]
     log(f"Visuals for {len(real)}/{len(scenes)} scenes - historical film {stats['film']}, stock video "
-        f"{stats['video']}, archive photos {stats['archive']}, AI pictures {stats['image']}")
+        f"{stats['video']}, archive photos {stats['archive']}, other pictures {stats['image']} "
+        f"(AI-made {sum(1 for s in scenes if s.get('ai_made'))})")
     if not offline and len(real) < max(5, 0.5 * len(scenes)):
         raise RuntimeError(f"Only {len(real)} real visuals found - refusing to make a low-quality video. "
                            "Add PEXELS_API_KEY / PIXABAY_API_KEY secrets.")
@@ -2634,8 +2635,17 @@ def add_to_series(tok, vid, series):
         return
     try:
         pid = series_playlist(tok, series)
-        yt_api(tok, "playlistItems", {"snippet": {"playlistId": pid,
-                                                  "resourceId": {"kind": "youtube#video", "videoId": vid}}}, "snippet")
+        body = {"snippet": {"playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}}
+        # a brand-new playlist / just-uploaded video often answers 409 SERVICE_UNAVAILABLE for a few seconds
+        for wait in (10, 30, 60, 0):
+            try:
+                yt_api(tok, "playlistItems", body, "snippet")
+                break
+            except urllib.error.HTTPError as e:
+                if e.code not in (409, 500, 503) or not wait:
+                    raise
+                log(f"Playlist busy (HTTP {e.code}) - trying again in {wait}s")
+                time.sleep(wait)
         log(f"Added to playlist '{series}'")
     except urllib.error.HTTPError as e:
         log(f"Playlist not updated: HTTP {e.code} {e.read()[:200]!r}{SCOPE_HINT if e.code in (401, 403) else ''}")
