@@ -1,76 +1,80 @@
-[19:59:19] YouTube views for 'Lusitania sinking': best 13,698,110, 17 videos over 100k
-[19:59:19] Topic (evergreen): Lusitania - best YouTube video 13,698,110 views, 17 over 100k
-[19:59:19] Facts source: Wikipedia 'Sinking of RMS Lusitania' (99808 chars)
-[19:59:19] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
-[19:59:22] AI writer ok: groq openai/gpt-oss-120b
-[19:59:22] Topic: Lusitania (evergreen) | Lusitania: The Secret Munitions That Made It a Bomb | angle: The hidden war‑munitions cargo on Lusitania caused the catastrophic second explosion that sealed its fate
-[19:59:25] Waiting 20s for openai/gpt-oss-120b token budget
-[19:59:50] Chapter 1: 13 scenes
-[19:59:50] Chapter 2 only 210 of ~330 words, asking for the full length
-[19:59:53] Waiting 34s for openai/gpt-oss-120b token budget
-[20:00:31] Chapter 2: 13 scenes
-[20:00:34] Waiting 34s for openai/gpt-oss-120b token budget
-[20:01:13] Chapter 3 only 209 of ~330 words, asking for the full length
-[20:01:16] Waiting 24s for openai/gpt-oss-120b token budget
-[20:01:44] Chapter 3: 13 scenes
-[20:01:44] Chapter 4: 13 scenes
-[20:01:47] Waiting 30s for openai/gpt-oss-120b token budget
-[20:02:20] Chapter 5: 13 scenes
-[20:02:23] Waiting 39s for openai/gpt-oss-120b token budget
-[20:03:07] Fact fix line 0: Implies secret cargo turned liner into a bomb; the cargo was war supplies but not a bomb and its role is disputed.
-[20:03:07] Fact fix line 1: Incorrect departure date; Lusitania left New York on April 27, 1915, not May 7.
-[20:03:07] Fact fix line 4: States four million rifle rounds; the source says about 4.2 million, not exactly four million.
-[20:03:07] Fact fix line 6: Captain’s name is Daniel Dow, but he was not the captain; Captain William Thomas Turner was in command.
-[20:03:07] Fact fix line 14: Time of attack was about 2:10 am local time, but the periscope was 700 metres to starboard of the Old Head of Kinsale, n
-[20:03:07] Fact fix line 16: Exact launch distance of 700 metres is not confirmed; the source only gives the U‑boat’s position, not torpedo range.
-[20:03:07] Fact fix line 19: Attribution of second blast to cargo is presented as fact; investigations were inconclusive and the role of ammunition r
-[20:03:07] Fact fix line 22: No historical record of a journalist named Edward B. Baxter; this appears invented.
-[20:03:07] Fact fix line 23: Board of Trade inquiry did not note a “strange smell of cordite” or a bright flash; such details are not in the source.
-[20:03:07] Fact fix line 27: Repeats earlier inaccurate details and adds unfounded description of captain’s actions.
-[20:03:07] Fact fix line 30: Claims ammunition was packed months earlier under Admiralty watch; source does not specify timing or direct Admiralty su
-[20:03:07] Fact fix line 38: Claims Board of Trade downplayed ammunition’s role and hinted at “unexplained factors”; source says inquiries were obstr
-[20:03:07] Fact fix line 44: States British government classified the cargo manifest; the source notes debates and secrecy but not a formal classific
-[20:03:07] Fact fix line 46: Claims Churchill ordered a sanitized report omitting the secondary explosion; not supported by source.
-[20:03:07] Fact fix line 48: Mentions a secret telegram dated 20 May 1915 warning the U.S.; no such telegram is documented in the source.
-[20:03:07] Fact fix line 49: U.S. Navy’s final assessment citing a “catastrophic internal explosion” is not in source; the source says investigations
-[20:03:07] Fact fix line 54: Claims modern sonar shows dense metal clusters confirming massive ammunition stores; not supported by source.
-[20:03:07] Fact fix line 55: States divers recovered brass percussion fuses; source does not mention such recovery.
-[20:03:07] Fact fix line 58: Attributes 2023 sonar findings to Professor Robert Ballard; Ballard is not known to have made such announcements.
-[20:03:07] Fact fix line 61: Quantifies 173 tons of ammunition detonating and shattering the ship; causation is not definitively established.
-[20:03:07] Fact fix line 62: States loss of life surged to over 1,200 souls in minutes; source gives 1,960 aboard, 763 survivors (≈1,197 dead) but si
-[20:03:07] Fact fix line 63: Says United States felt shock in its ports and newspapers screamed for justice; while true sentiment existed, the phrasi
-[20:03:07] Fact fix line 64: Claims the outrage helped push Wilson toward war on 6 April 1917; source notes contribution but not direct causation.
-[20:03:07] Fact check: 23 line(s) corrected
-[20:03:07] Story written with 7 AI requests
-[20:03:07] Voice for 66 scenes...
-[20:04:32] Voice: google, 5 requests for 66 scenes
-[20:04:32] Narration: 9.8 min
-[20:04:53] Caption sync: 1394/1444 words matched to the voice
-[20:04:53] Visuals...
-[20:04:59] Visuals 1/66
-[20:05:16] Visuals 11/66
-[20:05:41] Visuals 21/66
-[20:06:09] Visuals 31/66
-[20:06:37] Visuals 41/66
-[20:06:51] Visuals 51/66
-[20:07:11] Visuals 61/66
-[20:07:20] Visuals for 66/66 scenes - historical film 1, stock video 47, archive photos 16, AI pictures 2
-[20:07:20] Scene clips...
-[20:07:23] Clip 1/66
-[20:07:54] Clip 11/66
-[20:08:46] Clip 21/66
-[20:09:43] Clip 31/66
-[20:10:50] Clip 41/66
-[20:11:29] Clip 51/66
-[20:12:05] Clip 61/66
-[20:12:26] Music: track.mp3 ['Music: "Lightless Dawn" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
-[20:15:14] Sound effects: audience murmur, boat engines, brush strokes, clock ticking, crackling fire, crash roar, crashing metal, creaking wood, crowd murmur, crowd murmuring, dark drone, deep boom, deep water, distant thunder, distant waves, drum roll, engine rumble, explosion boom, explosion echo, fire crackle, footsteps 
-[20:15:18] Final long render...
-[20:36:13] Short ready: short0.mp4 (51.9s, hook=yes, loop=yes)
-[20:37:28] Short ready: short1.mp4 (54.2s, hook=yes, loop=yes)
-[20:37:30] Long video ready: 9.8 min, 2 shorts
-[20:37:44] Uploaded https://youtu.be/nEISTHiSThg (public)
-[20:37:44] Thumbnail not set (verify channel at youtube.com/verify): HTTP Error 403: Forbidden
-[20:37:44] Subtitles not uploaded: HTTP 403 b'{\n  "error": {\n    "code": 403,\n    "message": "Request had insufficient authentication scopes.",\n    "errors": [\n      {\n        "message": "Insufficient Permission",\n        "domain": "global",\n    ' - the YouTube refresh token needs the youtube.force-ssl scope for this
-[20:37:46] Uploaded https://youtu.be/NELAJ6bJGog (private, publishes 2026-11-15T00:37:44Z)
-[20:37:49] Uploaded https://youtu.be/kKP_5n3LF9k (private, publishes 2026-11-15T05:37:44Z)
+[20:24:20] Trend signals: 15 YouTube, 10 Wikipedia, 10 anniversaries
+[20:24:20] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[20:24:21] AI writer ok: groq openai/gpt-oss-120b
+[20:24:21] YouTube views for 'Aero Caribbean crash 1992': best 18,111, 0 videos over 100k
+[20:24:21] Trending topic 'Aero Caribbean Crash' skipped: not enough views on YouTube (best 18,111)
+[20:24:22] YouTube views for 'Clutter family murders 1959': best 785,384, 4 videos over 100k
+[20:24:22] Topic (trending, series Nights That Shook America): Clutter Family Murders - best YouTube video 785,384 views, 4 over 100k
+[20:24:22] YouTube views for 'MKUltra': best 4,943,164, 7 videos over 100k
+[20:24:22] Topic (evergreen, series Secrets of War): Project MKUltra - best YouTube video 4,943,164 views, 7 over 100k
+[20:24:23] Facts source: Wikipedia 'MKUltra' (40637 chars)
+[20:24:23] Facts source: Wikipedia 'Murder of the Clutter family' (9393 chars)
+[20:24:24] Waiting 14s for openai/gpt-oss-120b token budget
+[20:24:43] Topic: Clutter Family Murders (trending) | Clutter Family Murders: The Night a Fake Safe Fueled a Heist | angle: A mistaken rumor about a non‑existent safe turned a simple robbery into a brutal family massacre.
+[20:24:46] Waiting 24s for openai/gpt-oss-120b token budget
+[20:25:16] Chapter 1: 13 scenes
+[20:25:16] Chapter 2: 12 scenes
+[20:25:19] Waiting 45s for openai/gpt-oss-120b token budget
+[20:26:10] Chapter 3: 14 scenes
+[20:26:10] Chapter 4: 13 scenes
+[20:26:13] Waiting 44s for openai/gpt-oss-120b token budget
+[20:27:00] Chapter 5: 13 scenes
+[20:27:00] Note: chapter 4 has no exact year in it
+[20:27:03] Waiting 43s for openai/gpt-oss-120b token budget
+[20:27:50] Fact fix line 1: Incorrect date; rumor spread later in 1959, not "early 1959".
+[20:27:50] Fact fix line 8: No evidence of a 1947 Chevrolet being loaded into the prison yard; they left the state after parole.
+[20:27:50] Fact fix line 14: Hickock and Smith did not escape from prison; they were parolees.
+[20:27:50] Fact fix line 26: They arrived early morning of 15 November, not night.
+[20:27:50] Fact fix line 30: No source mentions a pocket watch on the table.
+[20:27:50] Fact fix line 33: The Clutters were not forced into a second‑floor bathroom; they were herded there later, after the killers entered.
+[20:27:50] Fact fix line 35: Herb was taken to the basement, not forced down stairs by “boys”.
+[20:27:50] Fact fix line 40: The phrase “turned cold” is dramatized but not factual; they decided to kill after finding no safe.
+[20:27:50] Fact fix line 41: Smith slit Herb’s throat before the shotgun blast; source says he slit and then shot.
+[20:27:50] Fact fix line 42: Herb’s eyes did not “widen in shock” as a factual detail.
+[20:27:50] Fact fix line 43: Smith did not lift the shotgun; he fired it.
+[20:27:50] Fact fix line 44: No pillow detail in source; invented.
+[20:27:50] Fact fix line 45: Nancy’s eyes meeting his is not documented.
+[20:27:50] Fact fix line 48: Smith did not collect shells; source says killers retrieved each spent shell.
+[20:27:50] Fact fix line 53: They fled on 15 November, not “vanished” later; radio detail correct but timing off.
+[20:27:50] Fact fix line 54: No record of a patrol officer finding the radio; invented.
+[20:27:50] Fact fix line 55: Cash traced to Las Vegas motel is plausible but not detailed in source; keep vague.
+[20:27:50] Fact fix line 58: Trial began 15 March 1960 is correct; wording okay.
+[20:27:50] Fact fix line 61: Execution time correct; keep.
+[20:27:50] Fact check: 19 line(s) corrected
+[20:27:50] Story written with 6 AI requests
+[20:27:50] Voice for 67 scenes...
+[20:29:17] Voice: google, 5 requests for 67 scenes
+[20:29:17] Narration: 10.3 min
+[20:29:48] Caption sync: 1521/1587 words matched to the voice
+[20:29:48] Visuals...
+[20:29:49] Visuals 1/67
+[20:30:11] Visuals 11/67
+[20:30:33] Visuals 21/67
+[20:31:00] Visuals 31/67
+[20:31:33] Visuals 41/67
+[20:32:05] Visuals 51/67
+[20:32:37] Visuals 61/67
+[20:32:51] Visuals for 67/67 scenes - historical film 2, stock video 45, archive photos 12, AI pictures 8
+[20:32:51] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[20:32:51] Scene clips...
+[20:32:54] Clip 1/67
+[20:34:13] Clip 11/67
+[20:35:25] Clip 21/67
+[20:36:17] Clip 31/67
+[20:37:02] Clip 41/67
+[20:37:42] Clip 51/67
+[20:38:33] Clip 61/67
+[20:39:09] Music: track.mp3 ['Music: "Static Motion" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
+[20:42:42] Sound effects: birds chirp, birds chirping, box thud, camera shutter, car engine distant, car ticking, clock ticking, crickets, crowd murmur, dark drone, diner chatter, door creak, door slam, door thud, engine hum, engine rev, engine rumble, engine stop, footsteps echo, footsteps wood, gavel bang, gavel thud, gras
+[20:42:46] Final long render...
+[21:11:52] Short ready: short0.mp4 (54.4s, hook=yes, loop=yes)
+[21:13:36] Short ready: short1.mp4 (53.8s, hook=yes, loop=yes)
+[21:13:39] Long video ready: 10.3 min, 2 shorts
+[21:13:43] Uploaded https://youtu.be/kTTqNh_bGhY (public)
+[21:13:46] Thumbnail set
+[21:13:47] Subtitles (CC) uploaded
+[21:13:48] Created playlist 'Nights That Shook America' (PLCAH6bFE6gMA)
+[21:13:48] Playlist not updated: HTTP 409 b'{\n  "error": {\n    "code": 409,\n    "message": "The operation was aborted.",\n    "errors": [\n      {\n        "domain": "youtube.CoreErrorDomain",\n        "reason": "SERVICE_UNAVAILABLE"\n      }\n    ],'
+[21:13:49] Comment posted: Do you think the false safe rumor was the real trigger for the murders?
+[21:13:51] Uploaded https://youtu.be/M8Ad1R2O7aw (private, publishes 2026-11-16T01:13:49Z)
+[21:13:53] Uploaded https://youtu.be/yoFmm1NJGzE (private, publishes 2026-11-16T06:13:49Z)
