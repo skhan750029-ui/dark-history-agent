@@ -53,6 +53,7 @@ CHANNEL = os.getenv("CHANNEL_NAME", "Dark History")
 PRIVACY = (os.getenv("PRIVACY") or "public").strip().lower()
 LONG_MINUTES = float(os.getenv("LONG_MINUTES") or 11)
 SHORTS_COUNT = int(os.getenv("SHORTS_COUNT") or 2)
+SHORT_MIN, SHORT_MAX = 35.0, 44.5  # Shorts length in seconds
 LANG = (os.getenv("NARRATION_LANG") or "en").strip().lower()   # "en" = English narration, "ur" = Urdu
 TTS_VOICES = [v for v in [os.getenv("TTS_VOICE")] + (
     ["en-US-Chirp3-HD-Enceladus", "en-US-Chirp3-HD-Charon", "en-US-Chirp3-HD-Iapetus", "en-US-Studio-Q"] if LANG == "en" else
@@ -740,6 +741,37 @@ Return ONLY JSON: {{"title": "..."}}""", keys=("title",), max_tokens=300)
     return title
 
 
+def short_title(title, name):
+    """A Shorts title: a secret / question ('The Night the Mob Came'), never starting with the famous name
+    (that goes in the description and hashtags), at most 60 characters, never cut mid-word."""
+    t = re.sub(r"\s+", " ", title or "").strip().strip('"')
+    t = re.sub(rf"^\W*{re.escape(name)}\s*(?:[:\-–—|]\s*|'s\s+)?", "", t, flags=re.I).strip()
+    t = re.sub(r"#\w+", "", t).strip()
+    if len(t) > 60:
+        t = t[:60].rsplit(" ", 1)[0].rstrip(" ,-:")
+    return t[:1].upper() + t[1:] if t else ""
+
+
+def shorts_plan(shorts, name, n_ch):
+    """Two Shorts that stand alone: chapters far apart, different titles and hooks, no famous name first."""
+    out, used = [], []
+    for sh in shorts[:SHORTS_COUNT]:
+        sh = dict(sh)
+        c = sh.get("chapter", 0)
+        if used and min(abs(c - u) for u in used) < 2 and n_ch > 2:  # same or neighbouring chapter
+            c = max(range(n_ch), key=lambda x: (min(abs(x - u) for u in used), -x))
+        sh["chapter"] = c
+        sh["title"] = short_title(sh.get("title"), name) or "What Really Happened That Night?"
+        if any(sh["title"].lower() == o["title"].lower() for o in out):
+            sh["title"] = "What Really Happened That Night?" if out[0]["title"] != "What Really Happened That Night?" \
+                else "The Detail Nobody Talks About"
+        if any(sh.get("hook") and sh["hook"].lower() == o.get("hook", "").lower() for o in out):
+            sh["hook"] = ""
+        used.append(c)
+        out.append(sh)
+    return out
+
+
 def quote_found(quote, facts):
     """The words (or almost all of them, in order) appear in the source text."""
     import difflib
@@ -921,8 +953,8 @@ def normalize_outline(o, n_ch=5):
         except (TypeError, ValueError):
             c = 0
         shorts.append({"chapter": c, "title": text(sh.get("title"), fixed[c]["title"])[:90],
-                       "hook": text(sh.get("hook")), "loop": text(sh.get("loop"))})
-    o["shorts"] = shorts or [{"chapter": c, "title": fixed[c]["title"], "hook": "", "loop": ""}
+                       "hook": text(sh.get("hook")), "loop": text(sh.get("loop")), "angle": text(sh.get("angle"))})
+    o["shorts"] = shorts or [{"chapter": c, "title": fixed[c]["title"], "hook": "", "loop": "", "angle": ""}
                              for c in sorted({0, min(2, len(fixed) - 1)})]
     o["hook"] = text(o.get("hook"))
     scored = []
@@ -1045,6 +1077,16 @@ TITLE + THUMBNAIL are ONE pair: the title STARTS with the famous name exactly - 
 best-performing styles when they fit truthfully: "The Night the ..." (e.g. "Hindenburg: The Night the Sky
 Burned") or "What Killed ..." (e.g. "Dyatlov Pass: What Killed the Nine Hikers?"); thumbnail text 2-4 words that
 do NOT repeat any title word and add a second piece of curiosity; together one clear promise the video keeps.
+SHORTS (2 vertical clips for the Shorts feed, where people swipe away in the first second):
+- Each Short is cut from a DIFFERENT chapter, far apart in the story (never neighbours), with its OWN angle -
+  e.g. one about the crime itself, the other about the trial, the cover-up or the strange detail. They must
+  NOT feel like part 1 and part 2: each one makes complete sense on its own to someone who never saw the video.
+- Short title: a secret or a question, like our best Shorts "The Night the Mob Came", "What Killed United Air
+  Lines", "What Vanished Over the Atlantic". Do NOT put the famous name "{name}" in a Short title (it goes in
+  the description and hashtags). Max 50 characters, true to the facts, the two titles completely different.
+- Short hook = the very first words heard over the most dramatic shot: a jolt or a question, max 14 words,
+  understood alone (say briefly who / where / when), true. No greeting, no "in this video", no slow start.
+  The two hooks use different styles (e.g. one shocking fact, one question).
 Return ONLY JSON:
 {{"comment_question": "one short question for viewers about THIS story that invites an answer in the comments (e.g. 'Had you heard of this case before?' or 'What do you think really happened?')",
   "next_teaser": "{('one short TRUE line (max 12 words) that makes people want the NEXT video, about: ' + nxt['name'] + ' - e.g. the night a whole town vanished') if nxt else ''}",
@@ -1064,10 +1106,11 @@ Return ONLY JSON:
   "tags": ["8-15 English SEO tags mixing broad (dark history, unsolved mystery) and specific (event, place, year)"],
   "hashtags": ["#darkhistory", "#mystery", "one specific hashtag - 3 in total"],
   "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells, with exact names, dates, places"}}],
-  "shorts": [{{"chapter": 0, "title": "Shorts title max 60 chars, starting with '{name}' when it fits",
-              "hook": "first line of the Short: a shocking question or secret from this chapter, max 15 words",
+  "shorts": [{{"chapter": 0, "angle": "this Short's own angle in one sentence",
+              "title": "secret / question title, max 50 chars, WITHOUT '{name}' (e.g. 'The Night the ...', 'What Killed ...', 'What Vanished ...')",
+              "hook": "first words of the Short: a jolt or a question from this chapter, max 14 words, makes sense alone",
               "loop": "last line of the Short, max 15 words, that flows straight back into the hook when the Short replays (e.g. ends with '...and that is exactly why' or a half-sentence the hook completes)"}},
-             {{"chapter": 2, "title": "...", "hook": "...", "loop": "..."}}]
+             {{"chapter": {max(2, n_ch - 2)}, "angle": "a different angle", "title": "...", "hook": "...", "loop": "..."}}]
 }}""", keys=("chapters",), max_tokens=4000)
         if quote_found(text(outline.get("angle_quote")), facts):
             break
@@ -1084,9 +1127,7 @@ Return ONLY JSON:
         title = f"{name}: " + (re.sub(rf"^\W*{re.escape(name)}\W*", "", title, flags=re.I) or title)
     outline["title"] = fit_title(title, name, text(outline.get("angle")))
     outline = normalize_outline(outline, n_ch)
-    for sh in outline["shorts"]:
-        if name.lower() not in sh["title"].lower() and len(name) + 2 + len(sh["title"]) <= 60:
-            sh["title"] = f"{name}: {sh['title']}"
+    outline["shorts"] = shorts_plan(outline["shorts"], name, len(outline["chapters"]))
     outline["series"] = pick["series"]
     q = text(outline.get("comment_question"), f"Had you heard of {name} before this video?")
     outline["comment_question"] = q if q.endswith("?") else q.rstrip(".") + "?"
@@ -1211,7 +1252,11 @@ Return ONLY JSON with one entry per chapter, in order:
         said = " ".join(s["ur"] for s in scenes if s["chapter"] == i)
         if said and not re.search(r"\b1[0-9]{3}\b|\b20[0-2][0-9]\b", said):
             log(f"Note: chapter {i + 1} has no exact year in it")
-    _, tfix = fact_check(scenes, facts, outline["title"])
+    # the Shorts' own title / hook / loop lines are checked against the same facts as the narration
+    extra = [{"ur": sh[k], "sh": sh, "k": k} for sh in outline["shorts"] for k in ("title", "hook", "loop") if sh.get(k)]
+    _, tfix = fact_check(scenes + extra, facts, outline["title"])
+    for e in extra:
+        e["sh"][e["k"]] = short_title(e["ur"], name) if e["k"] == "title" else e["ur"]
     if tfix:
         outline["title"] = tfix
     if scenes and scenes[0].get("cold_open"):
@@ -2357,7 +2402,9 @@ def voice_line(line, wav, work):
         edge_tts_voice(speakable(line), raw)
     else:
         google_tts(speakable(line), raw)
-    run(["ffmpeg", "-y", "-i", raw, "-af", "highpass=f=70,acompressor=threshold=-18dB:ratio=3:attack=5:release=150,"
+    # no silence before the first word: in a Short the voice starts on the very first frame
+    run(["ffmpeg", "-y", "-i", raw, "-af", "silenceremove=start_periods=1:start_threshold=-45dB,"
+         "highpass=f=70,acompressor=threshold=-18dB:ratio=3:attack=5:release=150,"
          "loudnorm=I=-15:TP=-1.5,aresample=44100,apad=pad_dur=0.3", "-ac", "2", wav])
     return duration(wav)
 
@@ -2406,8 +2453,7 @@ def render_short(story, clean_video, work, starts, durs, total, which, k):
         parts.append(short_piece(scenes[drama], hw, hd, work, work / f"{tag}_hook.mp4", drama, hit=True))
         caps += line_captions(hook, 0, hd)
         t = hd
-    else:
-        caps.append((0, 3.0, title.upper(), "Top"))
+    # no title card: without a hook line the Short opens straight on the story with big captions
     loop_d, lw = 0.0, work / f"{tag}_loop.wav"
     if loop:
         try:
@@ -2415,14 +2461,15 @@ def render_short(story, clean_video, work, starts, durs, total, which, k):
         except Exception as e:
             log(f"Short loop line skipped (voice failed: {str(e)[:120]})")
             loop = ""
-    room = 58.5 - t - loop_d
-    s0 = starts[idxs[0]]
+    # 35-45 seconds in total (short enough to be watched to the end and replayed)
+    room = SHORT_MAX - t - loop_d
+    s0 = max(starts[idxs[0]], 1.2)  # never the documentary's fade-in from black
     end = s0
     for i in range(idxs[0], len(scenes)):
         if starts[i] + durs[i] - s0 > room:
             break
         end = starts[i] + durs[i]
-    if end - s0 < min(20, room):  # chapter too short: extend in time
+    if end - s0 < SHORT_MIN - t - loop_d:  # whole scenes don't fill 35 s: cut inside the next scene
         end = min(total, s0 + room)
     dur = end - s0
     body = work / f"{tag}_body.mp4"
@@ -2786,10 +2833,14 @@ def main():
         for k, (sv, stitle) in enumerate(shorts):
             when = (now + dt.timedelta(hours=4 + 5 * k)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
             t = stitle if "#shorts" in stitle.lower() else f"{stitle} #shorts"
-            extra = f"Full documentary: https://youtu.be/{vid}\n\n"
+            # the famous name lives in the description, hashtags and tags (not at the start of the title)
+            name = story["topic"]
+            extra = f"The true story of {name}.\nFull documentary: https://youtu.be/{vid}\n\n"
+            stags = [f"#{re.sub(r'[^A-Za-z0-9]', '', name)}"] + [h for h in story.get("hashtags", [])][:2]
             try:
-                svid, sst = yt_upload(tok, sv, t, description(story, credits, extra),
-                                      story.get("tags", []), publish_at=when)
+                svid, sst = yt_upload(tok, sv, t, description({**story, "hashtags": stags}, credits, extra),
+                                      [name] + [x for x in story.get("tags", []) if x.lower() != name.lower()],
+                                      publish_at=when)
                 results.append(("short", t, sst, svid))
             except Exception as e:
                 log(f"Short upload failed: {e}")
