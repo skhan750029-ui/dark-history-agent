@@ -1,1 +1,105 @@
-[22:53:06] Today's documentary is already uploaded - this backup run has nothing to do
+[01:18:42] Topic promised by the last video: Air Florida Flight 90
+[01:18:42] Topic (evergreen, series Air Disasters): Air Florida Flight 90 - best YouTube video 4,562,386 views, 12 over 100k
+[01:18:44] Wikipedia top views 2026-11-17 failed: HTTP Error 404: Not Found
+[01:18:51] Trend signals: 15 YouTube, 8 Wikipedia, 10 anniversaries
+[01:18:52] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[01:18:53] AI writer ok: groq openai/gpt-oss-120b
+[01:18:54] YouTube views for 'Andes plane crash documentary': best 19,592,055, 5 videos over 100k
+[01:18:54] Topic (trending, series Air Disasters): Andes Flight Disaster - best YouTube video 19,592,055 views, 5 over 100k
+[01:18:54] Facts source: Wikipedia 'Uruguayan Air Force Flight 571' (50175 chars)
+[01:18:55] Facts source: Wikipedia 'Air Florida Flight 90' (26596 chars)
+[01:18:56] Waiting 14s for openai/gpt-oss-120b token budget
+[01:19:17] Topic: Air Florida Flight 90 (evergreen) | Air Florida Flight 90: Half‑deiced wing caused crash | angle: The deicing crew's improper mixture left one wing half‑deiced, creating asymmetric lift that doomed the takeoff.
+[01:19:20] Waiting 31s for openai/gpt-oss-120b token budget
+[01:19:54] Chapter 1: 13 scenes
+[01:19:54] Chapter 2 only 205 of ~330 words, asking for the full length
+[01:19:57] Waiting 23s for openai/gpt-oss-120b token budget
+[01:20:24] Chapter 2: 13 scenes
+[01:20:27] Waiting 36s for openai/gpt-oss-120b token budget
+[01:21:08] Chapter 3: 13 scenes
+[01:21:08] Chapter 4: 13 scenes
+[01:21:11] Waiting 33s for openai/gpt-oss-120b token budget
+[01:21:47] Chapter 5: 13 scenes
+[01:21:50] Waiting 23s for openai/gpt-oss-120b token budget
+[01:22:18] Fact fix line 0: Title statement claims hidden deicing flaw as proven fact, which is not supported by NTSB report.
+[01:22:18] Fact fix line 1: Speculative cause (lift imbalance from uneven deicing) not established by facts.
+[01:22:18] Fact fix line 3: Describes fuselage glistening under a weak winter sun, which is dramatization not in source.
+[01:22:18] Fact fix line 5: Implied captain’s thoughts are speculative.
+[01:22:18] Fact fix line 6: Speculative description of first officer’s actions.
+[01:22:18] Fact fix line 8: Implied deicing truck was from American Airlines, which is correct, but wording suggests certainty of procedure.
+[01:22:18] Fact fix line 9: Specific claim of two operators setting different mixture ratios is not in source.
+[01:22:18] Fact fix line 10: States right wing clean and left wing still iced, which is not proven.
+[01:22:18] Fact fix line 12: Exact time 3:59 pm and description of wheels crunching are dramatized; source only notes takeoff roll at 3:59 pm.
+[01:22:18] Fact fix line 14: Repetition of date and weather description not directly sourced.
+[01:22:18] Fact fix line 16: Names Tom Miller and Luis Gonzalez are not in source.
+[01:22:18] Fact fix line 17: Specific mixture percentages and operator choices are not documented.
+[01:22:18] Fact fix line 18: Claim of thin ice veil on left wing is not confirmed.
+[01:22:18] Fact fix line 20: Test result about nozzle swap is not cited in source.
+[01:22:18] Fact fix line 22: Statement about fresh snow adding to half‑deiced wing is speculative.
+[01:22:18] Fact fix line 23: Specific claim of ice layer disrupting airflow is not in source.
+[01:22:18] Fact fix line 27: Dramatic description of wind and hangars is not factual.
+[01:22:18] Fact fix line 28: Specific claim about mixture differences is not proven.
+[01:22:18] Fact fix line 30: Reverse thrust pushback claim and its effect on engine ice are not in source.
+[01:22:18] Fact fix line 31: Debate and anti‑ice switch status are speculative beyond checklist exchange.
+[01:22:18] Fact fix line 33: Describes wing already coated with ice at takeoff, not confirmed.
+[01:22:18] Fact fix line 36: Exact description of veering and bridge proximity is dramatized.
+[01:22:18] Fact fix line 37: Quote “Pull up!” is not documented.
+[01:22:18] Fact fix line 38: Flash of metal and other dramatization not factual.
+[01:22:18] Fact fix line 40: Specific claim of 97 feet of guard rail ripped is supported, but phrasing “left wing slammed” is inaccurate.
+[01:22:18] Fact fix line 42: Number of motorists killed is correct, but phrasing “their lives ending beneath the twisted wreckage” is dramatized.
+[01:22:18] Fact fix line 44: Specific actions of Kelly Duncan are not detailed in source.
+[01:22:18] Fact fix line 45: Number of passenger survivors is inaccurate; only four passengers survived, not “four passengers survived the initial im
+[01:22:18] Fact fix line 46: Arland D. Williams Jr. was a motorist, not a passenger, and he helped rescue survivors, which is correct, but phrasing “
+[01:22:18] Fact fix line 49: State of the Union address timing is correct, but “later praised” is vague.
+[01:22:18] Fact fix line 51: Statement that deicing crew used mismatched mixtures is not definitively proven by NTSB.
+[01:22:18] Fact fix line 54: Date of Reagan’s mention is correct, but “praising their bravery as a beacon of hope” is editorial.
+[01:22:18] Fact fix line 58: FAA rule date and specifics are not documented in source.
+[01:22:18] Fact fix line 59: Requirement to install a mix‑monitor on each deicing nozzle is not a documented regulation.
+[01:22:18] Fact fix line 60: Checklist addition in 1984 is not supported by source.
+[01:22:18] Fact fix line 61: Claim of no major 737 crash linked to half‑deiced wings since adoption is unverified.
+[01:22:18] Fact fix line 62: Reference to “Reagan National” airport is inaccurate; the airport is Washington National (now Reagan National).
+[01:22:18] Fact fix line 66: Title of segment is fine but line is a heading, not factual claim.
+[01:22:18] Fact fix line 67: Exact snow amount is correct, but phrasing is dramatized.
+[01:22:18] Fact fix line 68: Dramatic “set the stage” phrasing not factual.
+[01:22:18] Fact fix line 69: Heading is acceptable.
+[01:22:18] Fact fix line 70: Heading is acceptable.
+[01:22:18] Fact fix line 71: Dramatic “changed everything” is editorial.
+[01:22:18] Fact check: 43 line(s) corrected
+[01:22:18] Fact check: title changed from 'Air Florida Flight 90: Half‑deiced wing caused crash' to 'Air Florida Flight 90: Deicing issues and pilot error'
+[01:22:18] Story written with 8 AI requests
+[01:22:18] Voice for 67 scenes...
+[01:23:18] Voice: google, 5 requests for 67 scenes
+[01:23:18] Narration: 6.8 min
+[01:23:40] Caption sync: 958/1000 words matched to the voice
+[01:23:40] Visuals...
+[01:23:42] Visuals 1/67
+[01:24:08] Visuals 11/67
+[01:24:36] Visuals 21/67
+[01:24:54] Visuals 31/67
+[01:25:10] Visuals 41/67
+[01:25:34] Visuals 51/67
+[01:25:59] Visuals 61/67
+[01:26:12] Visuals for 67/67 scenes - historical film 0, stock video 40, archive photos 12, other pictures 15 (AI-made 0)
+[01:26:12] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[01:26:12] Scene clips...
+[01:26:15] Clip 1/67
+[01:26:53] Clip 11/67
+[01:27:32] Clip 21/67
+[01:28:10] Clip 31/67
+[01:28:42] Clip 41/67
+[01:29:31] Clip 51/67
+[01:30:08] Clip 61/67
+[01:30:39] Music: track.mp3 ['Music: "Darkest Child" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
+[01:33:38] Sound effects: airport ambience, alarm beep, applause, breathing gasp, click switches, click turn, clock ticking, cold wind, crackle ice, crash roar, crowd gasp, crowd murmur, dark drone, distant hum, engine hum, engine idle, engine roar, engine rumble, engine strain, gavel bang, jet roar, low drone, metal clank, 
+[01:33:42] Final long render...
+[01:53:20] Short ready: short0.mp4 (43.4s, hook=yes, loop=yes)
+[01:54:43] Short ready: short1.mp4 (41.0s, hook=yes, loop=yes)
+[01:54:46] Long video ready: 6.8 min, 2 shorts
+[01:54:51] Uploaded https://youtu.be/Jfi6QlVwdsg (public)
+[01:54:53] Thumbnail set
+[01:54:53] Subtitles (CC) uploaded
+[01:54:54] Created playlist 'Air Disasters' (PLT5B2cw-8vRU)
+[01:54:54] Added to playlist 'Air Disasters'
+[01:54:55] Comment posted: What hidden mistake do you think sealed the fate of Air Florida Flight 90?
+[01:54:57] Uploaded https://youtu.be/8aOicEPe2ws (private, publishes 2026-11-18T05:54:55Z)
+[01:54:59] Uploaded https://youtu.be/5XdKBrVm0SE (private, publishes 2026-11-18T10:54:55Z)
