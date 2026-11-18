@@ -796,8 +796,9 @@ def fact_check(scenes, facts, title=""):
         got = ask_json(f"""You are the fact-checker of a history documentary. Compare EVERY numbered narration line
 with the SOURCE FACTS. A line is wrong if it states a name, date, number, place, quote or event that the
 facts do not support, or presents a legend or theory as proven fact. Dramatic wording is fine; invented
-facts are not. For each wrong line give a corrected line of similar length that only uses supported
-facts (or clearly says "according to legend" / "one theory says").
+facts are not. For each wrong line give a corrected line of THE SAME LENGTH that only uses supported
+facts (or clearly says "according to legend" / "one theory says"): keep the drama and the storytelling,
+replace only the invented detail with a true detail from the facts. Never just shorten the line.
 SOURCE FACTS (Wikipedia):
 {facts}
 
@@ -805,14 +806,15 @@ TITLE: {title}
 NARRATION:
 {numbered}
 Also check the TITLE: if it states something the facts do not support (or a disputed theory as proven),
-give a corrected title (same start before the colon, max 60 characters, may be a question).
+give a corrected title (same start before the colon, max 60 characters, Title Case, still gripping -
+best as a question or "The Night the ..." / "What Killed ..." - never a flat list like "X and Y").
 Return ONLY JSON: {{"fixes": [{{"line": 3, "problem": "short reason", "text": "corrected line"}}],
 "title_fix": "corrected title, or empty if the title is fine"}}
 (an empty fixes list if everything is supported)""", keys=("fixes",), max_tokens=3000)
     except Exception as e:
         log(f"Fact check skipped: {e}")
         return 0, ""
-    n = 0
+    n, before = 0, sum(len(s["ur"].split()) for s in scenes)
     for fx in got.get("fixes") or []:
         try:
             i = int(fx.get("line"))
@@ -823,7 +825,7 @@ Return ONLY JSON: {{"fixes": [{{"line": 3, "problem": "short reason", "text": "c
             log(f"Fact fix line {i}: {text(fx.get('problem'))[:120]}")
             scenes[i]["ur"] = new
             n += 1
-    log(f"Fact check: {n} line(s) corrected")
+    log(f"Fact check: {n} line(s) corrected ({before} -> {sum(len(s['ur'].split()) for s in scenes)} words)")
     tfix = text(got.get("title_fix"))
     head = title.split(":")[0].strip().lower()
     if tfix and tfix != title and len(tfix) <= 60 and tfix.lower().startswith(head):
@@ -2750,6 +2752,29 @@ def description(story, credits, extra=""):
 
 # =============================================================== MAIN
 
+def video_day(t, start_hour):
+    """The daily 'slot' a moment belongs to. GitHub often starts scheduled runs many hours late (even after
+    midnight UTC), so a day's slot runs from start_hour UTC to start_hour UTC of the next day."""
+    return (t - dt.timedelta(hours=start_hour)).date()
+
+
+def already_done(lines, marker, start_hour, now=None):
+    """True when a line with marker (e.g. ',long,') was logged in the current slot."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    for line in lines:
+        if marker not in line:
+            continue
+        try:
+            t = dt.datetime.fromisoformat(line.split(",", 1)[0])
+        except ValueError:
+            continue
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=dt.timezone.utc)
+        if video_day(t, start_hour) == video_day(now, start_hour):
+            return True
+    return False
+
+
 def preview(files, out):
     try:
         ims = []
@@ -2779,10 +2804,9 @@ def main():
     ap.add_argument("--script")
     a = ap.parse_args()
     DATA.mkdir(exist_ok=True)
-    today = dt.datetime.now(dt.timezone.utc).date().isoformat()
     log_f = DATA / "upload_log.csv"
     if (os.getenv("RUN_EVENT") == "schedule" and not (a.no_upload or a.offline or a.script) and log_f.exists()
-            and any(l.startswith(today) and ",long," in l for l in log_f.read_text(encoding="utf-8").splitlines())):
+            and already_done(log_f.read_text(encoding="utf-8").splitlines(), ",long,", 13)):
         log("Today's documentary is already uploaded - this backup run has nothing to do")
         return
 

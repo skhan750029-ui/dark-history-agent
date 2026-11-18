@@ -954,8 +954,9 @@ def main():
     a = ap.parse_args()
     DATA.mkdir(parents=True, exist_ok=True)
     hist = history()
-    today = dt.datetime.now(dt.timezone.utc).date().isoformat()
-    if os.getenv("RUN_EVENT") == "schedule" and not a.no_upload and any(r.get("date", "").startswith(today) for r in hist):
+    # one day = 09:00 UTC to 09:00 UTC next day, because GitHub often starts the 10:53 run many hours late
+    done = [f"{r.get('date', '')},short" for r in hist if r.get("video")]
+    if os.getenv("RUN_EVENT") == "schedule" and not a.no_upload and base.already_done(done, ",short", 9):
         log("Today's Shorts are already uploaded - this backup run has nothing to do")
         return
     rng =random.Random(dt.date.today().toordinal())
