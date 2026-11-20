@@ -1,1 +1,62 @@
-[00:55:54] Today's documentary is already uploaded - this backup run has nothing to do
+[22:15:04] Topic promised by the last video: Pied Piper of Hamelin
+[22:15:04] Topic (evergreen, series Unsolved Mysteries): Pied Piper of Hamelin - best YouTube video 3,934,697 views, 11 over 100k
+[22:15:14] Trend signals: 15 YouTube, 12 Wikipedia, 10 anniversaries
+[22:15:15] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[22:15:16] AI writer ok: groq openai/gpt-oss-120b
+[22:15:17] YouTube views for 'Lufthansa Flight 540 crash': best 964,865, 16 videos over 100k
+[22:15:17] Topic (trending, series Air Disasters): Lufthansa Flight 540 - best YouTube video 964,865 views, 16 over 100k
+[22:15:17] Facts source: Wikipedia 'Lufthansa Flight 540' (5082 chars)
+[22:15:18] Facts source: Wikipedia 'Pied Piper of Hamelin' (36484 chars)
+[22:15:19] Waiting 22s for openai/gpt-oss-120b token budget
+[22:15:45] Angle not backed by the facts (The legend likely stems from a documented 14th‑century child exodus, with the rat element added cent) - asking again
+[22:15:48] Waiting 29s for openai/gpt-oss-120b token budget
+[22:16:19] Topic: Pied Piper of Hamelin (evergreen) | Pied Piper of Hamelin: The Children‑Only Legend | angle: The original Pied Piper tale never mentioned rats – they were a later addition.
+[22:16:22] Waiting 35s for openai/gpt-oss-120b token budget
+[22:17:04] Chapter 1: 12 scenes
+[22:17:04] Chapter 2: 12 scenes
+[22:17:07] Waiting 32s for openai/gpt-oss-120b token budget
+[22:17:45] Chapter 3: 13 scenes
+[22:17:45] Chapter 4: 12 scenes
+[22:17:48] Waiting 44s for openai/gpt-oss-120b token budget
+[22:18:35] Chapter 5: 13 scenes
+[22:18:38] Waiting 42s for openai/gpt-oss-120b token budget
+[22:19:21] Fact check: 0 line(s) corrected (1311 -> 1311 words)
+[22:19:21] Fact check: title changed from 'Pied Piper of Hamelin: The Children‑Only Legend' to 'Pied Piper of Hamelin: Legend of Vanished Children'
+[22:19:21] Story written with 7 AI requests
+[22:19:21] Voice for 64 scenes...
+[22:20:40] Voice: google, 5 requests for 64 scenes
+[22:20:40] Narration: 9.3 min
+[22:21:02] Caption sync: 1176/1277 words matched to the voice
+[22:21:02] Visuals...
+[22:21:03] Visuals 1/64
+[22:21:18] Visuals 11/64
+[22:21:33] Visuals 21/64
+[22:21:51] Visuals 31/64
+[22:22:11] Visuals 41/64
+[22:22:28] Visuals 51/64
+[22:22:44] Visuals 61/64
+[22:22:46] Visuals for 64/64 scenes - historical film 0, stock video 54, archive photos 6, other pictures 4 (AI-made 0)
+[22:22:46] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[22:22:46] Scene clips...
+[22:22:49] Clip 1/64
+[22:23:31] Clip 11/64
+[22:24:07] Clip 21/64
+[22:24:53] Clip 31/64
+[22:25:32] Clip 41/64
+[22:26:14] Clip 51/64
+[22:27:04] Clip 61/64
+[22:27:22] Music: track.mp3 ['Music: "Gathering Darkness" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
+[22:30:26] Sound effects: cheering voices, children murmuring, church bells, church bells faint, crowd murmur, crowd murmuring, dark drone, distant coughs, distant pipe, fire crackling, footsteps stone, footsteps wood, forest night, forest wind, glass chime, heartbeat, ink drip, ink pen scratching, ink scratching, light tink
+[22:30:30] Final long render...
+[22:50:14] Short ready: short0.mp4 (40.2s, hook=yes, loop=yes)
+[22:51:13] Short ready: short1.mp4 (39.0s, hook=yes, loop=yes)
+[22:51:16] Long video ready: 9.3 min, 2 shorts
+[22:51:24] Uploaded https://youtu.be/w-EChVkfEZ0 (public)
+[22:51:26] Thumbnail set
+[22:51:27] Subtitles (CC) uploaded
+[22:51:28] Created playlist 'Unsolved Mysteries' (PLCyZGW1-kzDY)
+[22:51:28] Playlist busy (HTTP 409) - trying again in 10s
+[22:51:39] Added to playlist 'Unsolved Mysteries'
+[22:51:40] Comment posted: What do you think really happened to the 130 children of Hamelin?
+[22:51:43] Uploaded https://youtu.be/1Ltf3zaf1YM (private, publishes 2026-11-21T02:51:40Z)
+[22:51:46] Uploaded https://youtu.be/33D1YhnCRHo (private, publishes 2026-11-21T07:51:40Z)
