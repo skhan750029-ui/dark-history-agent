@@ -1,1 +1,24 @@
-[21:55:33] Today's Shorts are already uploaded - this backup run has nothing to do
+[18:53:53] Short 1 (try 1): listicle, for students, hook 'qa_dialog'
+[18:54:10] Verified on the official site: Yoodli (https://yoodli.ai/)
+[18:54:10] Official page failed Gamma https://gamma.app/: HTTP 403
+[18:54:25] Verified on the official site: DeepL (https://www.deepl.com/en/translator)
+[18:54:41] Verified on the official site: Canva (https://www.canva.com/canva-ai/)
+[18:54:57] Verified on the official site: Otter.ai (https://otter.ai/)
+[18:55:01] Verified on the official site: Google Lens (https://search.google/ways-to-search/lens/)
+[18:55:01] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[18:55:03] AI writer ok: groq openai/gpt-oss-120b
+[18:55:10] Voice: google (en-US-Chirp3-HD-Achird)
+[18:55:12] Caption sync: 65/78 words matched to the voice
+[18:55:39] Outro voice level in narration: -21.9 dB
+[18:55:50] Outro voice level in the final Short: -14.1 dB
+[18:55:50] Short 1 ready: ai_short0.mp4 (36.5s, listicle, hook qa_dialog, tools DeepL, Otter.ai, Canva)
+[18:55:50] Short 2 (try 1): explainer, one tool, hook 'numbered_list'
+[18:56:06] Verified on the official site: Yoodli (https://yoodli.ai/)
+[18:56:14] Voice: google (en-US-Chirp3-HD-Achird)
+[18:56:16] Caption sync: 77/82 words matched to the voice
+[18:56:45] Outro voice level in narration: -22.5 dB
+[18:56:56] Outro voice level in the final Short: -15.0 dB
+[18:56:56] Short 2 ready: ai_short1.mp4 (40.9s, explainer, hook numbered_list, tools Yoodli, Yoodli, Yoodli)
+[18:56:59] Uploaded https://youtu.be/EAela-tFej8 to channel 'Everyday AI Easy' (private, publishes 2026-11-20T19:26:57Z)
+[18:57:01] Uploaded https://youtu.be/84NE-T_9ZVU to channel 'Everyday AI Easy' (private, publishes 2026-11-20T23:26:57Z)
+[18:57:01] Done: 2 Shorts made, 2 uploaded
