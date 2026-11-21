@@ -1,1 +1,32 @@
-[21:28:00] Today's Shorts are already uploaded - this backup run has nothing to do
+[17:48:11] Short 1 (try 1): listicle, for creators, hook 'comparison'
+[17:48:19] Verified on the official site: Descript (https://www.descript.com/)
+[17:48:19] Official page failed Gamma https://gamma.app/: HTTP 403
+[17:48:19] Official page failed Lovable https://lovable.dev/: HTTP 403
+[17:48:19] Official page failed Adobe Firefly https://www.adobe.com/products/firefly.html: HTTP 403
+[17:48:25] Verified on the official site: Suno (https://suno.com/)
+[17:48:39] Verified on the official site: Clipchamp (https://clipchamp.com/en/)
+[17:48:45] Verified on the official site: Runway (https://runway.com/)
+[17:48:49] Verified on the official site: NotebookLM (https://notebook.google/)
+[17:48:49] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[17:48:51] AI writer ok: groq openai/gpt-oss-120b
+[17:48:58] Voice: google (en-US-Chirp3-HD-Achird)
+[17:49:00] Caption sync: 100/101 words matched to the voice
+[17:49:36] Outro voice level in narration: -21.9 dB
+[17:49:49] Outro voice level in the final Short: -14.3 dB
+[17:49:49] Short 1 ready: ai_short0.mp4 (41.8s, listicle, hook comparison, tools Descript, Clipchamp, Runway)
+[17:49:49] Short 2 (try 1): listicle, for small business owners, hook 'before_after'
+[17:49:49] Official page failed Gamma https://gamma.app/: HTTP 403
+[17:49:50] Official page failed Lovable https://lovable.dev/: HTTP 403
+[17:49:55] Verified on the official site: Shopify Magic (https://www.shopify.com/sidekick)
+[17:50:01] Verified on the official site: Canva (https://www.canva.com/canva-ai/)
+[17:50:16] Verified on the official site: Grammarly (https://www.grammarly.com/)
+[17:50:36] Verified on the official site: Microsoft Copilot (https://www.microsoft.com/en-us/copilot)
+[17:50:40] Verified on the official site: Napkin AI (https://www.napkin.ai/)
+[17:50:49] Voice: google (en-US-Chirp3-HD-Achird)
+[17:50:51] Caption sync: 99/104 words matched to the voice
+[17:51:22] Outro voice level in narration: -20.6 dB
+[17:51:37] Outro voice level in the final Short: -13.3 dB
+[17:51:37] Short 2 ready: ai_short1.mp4 (45.6s, listicle, hook before_after, tools Shopify Magic, Canva, Microsoft Copilot)
+[17:51:40] Uploaded https://youtu.be/4F4IV0RxxXw to channel 'Everyday AI Easy' (private, publishes 2026-11-21T18:21:38Z)
+[17:51:42] Uploaded https://youtu.be/3n54gHIXsDc to channel 'Everyday AI Easy' (private, publishes 2026-11-21T22:21:38Z)
+[17:51:42] Done: 2 Shorts made, 2 uploaded
