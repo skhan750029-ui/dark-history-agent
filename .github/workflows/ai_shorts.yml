@@ -2,13 +2,10 @@ name: Everyday AI Easy - 2 Shorts
 
 # Separate channel and separate bot (agent/ai_shorts.py). Dark History's workflow is untouched.
 on:
-  schedule:
-    # 10:53 UTC; GitHub usually starts it ~30-40 min late -> uploads ~11:30 UTC (4:30 PM PKT), Shorts publish
-    # ~5 PM and ~9 PM PKT (8 AM / 12 PM New York). Dark History runs ~15:13 UTC.
-    - cron: "53 10 * * *"
-    # backup: GitHub sometimes drops a scheduled run under load; this one does nothing if today's Shorts
-    # were already uploaded (~7:15 PM PKT if it has to work)
-    - cron: "37 13 * * *"
+  # Daily schedule switched OFF by the owner (2026-11-24): no automatic runs. To turn it back on, restore:
+  # schedule:
+  #   - cron: "53 10 * * *"   # daily run
+  #   - cron: "37 13 * * *"   # backup (does nothing if today's Shorts are already uploaded)
   workflow_dispatch:
     inputs:
       privacy:
