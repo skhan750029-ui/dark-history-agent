@@ -2,7 +2,8 @@
 """
 Dark History studio (v2) - one run makes and uploads:
   * 1 long documentary (16:9, ~10-12 min, Urdu narration, English title)
-  * 2 YouTube Shorts (9:16) cut from the strongest moments of that video
+  * 2 YouTube Shorts (9:16), each its own complete true story on a different topic (5 rotating styles:
+    on this day / vanished / strange accident / the night the... / hidden truth), not cut from the video
 
 Pipeline: trending topic (YouTube + Wikipedia + anniversaries) -> story checked against Wikipedia
 (3-4 free AI requests) -> narration (Google Chirp HD voice, spoken in long passages) -> real video
@@ -752,26 +753,6 @@ def short_title(title, name):
     return t[:1].upper() + t[1:] if t else ""
 
 
-def shorts_plan(shorts, name, n_ch):
-    """Two Shorts that stand alone: chapters far apart, different titles and hooks, no famous name first."""
-    out, used = [], []
-    for sh in shorts[:SHORTS_COUNT]:
-        sh = dict(sh)
-        c = sh.get("chapter", 0)
-        if used and min(abs(c - u) for u in used) < 2 and n_ch > 2:  # same or neighbouring chapter
-            c = max(range(n_ch), key=lambda x: (min(abs(x - u) for u in used), -x))
-        sh["chapter"] = c
-        sh["title"] = short_title(sh.get("title"), name) or "What Really Happened That Night?"
-        if any(sh["title"].lower() == o["title"].lower() for o in out):
-            sh["title"] = "What Really Happened That Night?" if out[0]["title"] != "What Really Happened That Night?" \
-                else "The Detail Nobody Talks About"
-        if any(sh.get("hook") and sh["hook"].lower() == o.get("hook", "").lower() for o in out):
-            sh["hook"] = ""
-        used.append(c)
-        out.append(sh)
-    return out
-
-
 def quote_found(quote, facts):
     """The words (or almost all of them, in order) appear in the source text."""
     import difflib
@@ -1079,16 +1060,6 @@ TITLE + THUMBNAIL are ONE pair: the title STARTS with the famous name exactly - 
 best-performing styles when they fit truthfully: "The Night the ..." (e.g. "Hindenburg: The Night the Sky
 Burned") or "What Killed ..." (e.g. "Dyatlov Pass: What Killed the Nine Hikers?"); thumbnail text 2-4 words that
 do NOT repeat any title word and add a second piece of curiosity; together one clear promise the video keeps.
-SHORTS (2 vertical clips for the Shorts feed, where people swipe away in the first second):
-- Each Short is cut from a DIFFERENT chapter, far apart in the story (never neighbours), with its OWN angle -
-  e.g. one about the crime itself, the other about the trial, the cover-up or the strange detail. They must
-  NOT feel like part 1 and part 2: each one makes complete sense on its own to someone who never saw the video.
-- Short title: a secret or a question, like our best Shorts "The Night the Mob Came", "What Killed United Air
-  Lines", "What Vanished Over the Atlantic". Do NOT put the famous name "{name}" in a Short title (it goes in
-  the description and hashtags). Max 50 characters, true to the facts, the two titles completely different.
-- Short hook = the very first words heard over the most dramatic shot: a jolt or a question, max 14 words,
-  understood alone (say briefly who / where / when), true. No greeting, no "in this video", no slow start.
-  The two hooks use different styles (e.g. one shocking fact, one question).
 Return ONLY JSON:
 {{"comment_question": "one short question for viewers about THIS story that invites an answer in the comments (e.g. 'Had you heard of this case before?' or 'What do you think really happened?')",
   "next_teaser": "{('one short TRUE line (max 12 words) that makes people want the NEXT video, about: ' + nxt['name'] + ' - e.g. the night a whole town vanished') if nxt else ''}",
@@ -1107,12 +1078,7 @@ Return ONLY JSON:
   "description": "English description: the FIRST 2 LINES carry the hook and the main search keyword (they show in search results), then a 3-5 line summary, then 'Sources:' with 2-4 real sources",
   "tags": ["8-15 English SEO tags mixing broad (dark history, unsolved mystery) and specific (event, place, year)"],
   "hashtags": ["#darkhistory", "#mystery", "one specific hashtag - 3 in total"],
-  "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells, with exact names, dates, places"}}],
-  "shorts": [{{"chapter": 0, "angle": "this Short's own angle in one sentence",
-              "title": "secret / question title, max 50 chars, WITHOUT '{name}' (e.g. 'The Night the ...', 'What Killed ...', 'What Vanished ...')",
-              "hook": "first words of the Short: a jolt or a question from this chapter, max 14 words, makes sense alone",
-              "loop": "last line of the Short, max 15 words, that flows straight back into the hook when the Short replays (e.g. ends with '...and that is exactly why' or a half-sentence the hook completes)"}},
-             {{"chapter": {max(2, n_ch - 2)}, "angle": "a different angle", "title": "...", "hook": "...", "loop": "..."}}]
+  "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells, with exact names, dates, places"}}]
 }}""", keys=("chapters",), max_tokens=4000)
         if quote_found(text(outline.get("angle_quote")), facts):
             break
@@ -1129,7 +1095,6 @@ Return ONLY JSON:
         title = f"{name}: " + (re.sub(rf"^\W*{re.escape(name)}\W*", "", title, flags=re.I) or title)
     outline["title"] = fit_title(title, name, text(outline.get("angle")))
     outline = normalize_outline(outline, n_ch)
-    outline["shorts"] = shorts_plan(outline["shorts"], name, len(outline["chapters"]))
     outline["series"] = pick["series"]
     q = text(outline.get("comment_question"), f"Had you heard of {name} before this video?")
     outline["comment_question"] = q if q.endswith("?") else q.rstrip(".") + "?"
@@ -1254,11 +1219,7 @@ Return ONLY JSON with one entry per chapter, in order:
         said = " ".join(s["ur"] for s in scenes if s["chapter"] == i)
         if said and not re.search(r"\b1[0-9]{3}\b|\b20[0-2][0-9]\b", said):
             log(f"Note: chapter {i + 1} has no exact year in it")
-    # the Shorts' own title / hook / loop lines are checked against the same facts as the narration
-    extra = [{"ur": sh[k], "sh": sh, "k": k} for sh in outline["shorts"] for k in ("title", "hook", "loop") if sh.get(k)]
-    _, tfix = fact_check(scenes + extra, facts, outline["title"])
-    for e in extra:
-        e["sh"][e["k"]] = short_title(e["ur"], name) if e["k"] == "title" else e["ur"]
+    _, tfix = fact_check(scenes, facts, outline["title"])
     if tfix:
         outline["title"] = tfix
     if scenes and scenes[0].get("cold_open"):
@@ -2435,57 +2396,179 @@ def short_piece(sc, voice, dur, work, out, idx, hit=False):
     return out
 
 
-def render_short(story, clean_video, work, starts, durs, total, which, k):
-    """Hook line over the chapter's most dramatic shot -> the chapter cut from the documentary -> a loop
-    line that leads straight back into the hook when the Short replays. Big centred captions throughout."""
-    scenes = story["scenes"]
-    ch = which.get("chapter", 0)
-    hook, loop, title = which.get("hook", ""), which.get("loop", ""), which.get("title") or story["title"]
-    idxs = [i for i, s in enumerate(scenes) if s["chapter"] == ch and not (hook and s.get("cold_open"))] or [0]
-    tag = f"short{k}"
-    parts, caps, t = [], [], 0.0
-    hw = work / f"{tag}_hook.wav"
-    try:  # a voice problem only costs the Short its extra line, never the Short itself
-        hd = voice_line(hook, hw, work) if hook else 0.0
-    except Exception as e:
-        log(f"Short hook line skipped (voice failed: {str(e)[:120]})")
-        hook = ""
-    if hook:
-        drama = next((i for i in idxs if scenes[i].get("hit")), idxs[0])
-        parts.append(short_piece(scenes[drama], hw, hd, work, work / f"{tag}_hook.mp4", drama, hit=True))
-        caps += line_captions(hook, 0, hd)
-        t = hd
-    # no title card: without a hook line the Short opens straight on the story with big captions
-    loop_d, lw = 0.0, work / f"{tag}_loop.wav"
-    if loop:
+# =============================================================== 4b. STANDALONE SHORTS
+# Every Short is its own complete true story - NOT cut from the documentary - on a topic different from the
+# documentary and from the other Short, in one of 5 rotating styles. Facts come from the topic's Wikipedia
+# article and are checked line by line; a topic never comes back within 6 months (documentaries and Shorts
+# together); only real footage and photos (never AI pictures); 35-45 s; secret/question title; the hook
+# line and a big caption on the very first frame.
+
+SHORT_STYLES = {
+    "on_this_day": "ON THIS DAY: a real dark event that happened on this calendar date ({date}) in some past year",
+    "vanished": "VANISHED: real people, a ship, a plane or a whole village that disappeared",
+    "strange_accident": "STRANGE ACCIDENT: a real, bizarre, little-known accident or disaster",
+    "one_night": "THE NIGHT THE...: the story of one single real night when everything went wrong",
+    "hidden_truth": "HIDDEN TRUTH: the dark, little-known truth behind something famous (a place, landmark, "
+                    "object, invention, food or tradition)",
+}
+SHORTS_LOG_FIELDS = ["date", "style", "topic", "wikipedia", "title", "video"]
+
+
+def norm_topic(t):
+    return re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
+
+
+def shorts_log():
+    f = DATA / "shorts_log.csv"
+    if not f.exists():
+        return []
+    import csv
+    with open(f, encoding="utf-8", newline="") as fh:
+        return list(csv.DictReader(fh))
+
+
+def short_used_topics(extra=()):
+    """Topics of every documentary and Short of the last 6 months (+ extra): (normalised set, names)."""
+    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=REPEAT_DAYS)
+    names = [t for t in list(used_topics()) + list(extra) if t]
+    for r in shorts_log():
         try:
-            loop_d = voice_line(loop, lw, work)
-        except Exception as e:
-            log(f"Short loop line skipped (voice failed: {str(e)[:120]})")
-            loop = ""
-    # 35-45 seconds in total (short enough to be watched to the end and replayed)
-    room = SHORT_MAX - t - loop_d
-    s0 = max(starts[idxs[0]], 1.2)  # never the documentary's fade-in from black
-    end = s0
-    for i in range(idxs[0], len(scenes)):
-        if starts[i] + durs[i] - s0 > room:
-            break
-        end = starts[i] + durs[i]
-    if end - s0 < SHORT_MIN - t - loop_d:  # whole scenes don't fill 35 s: cut inside the next scene
-        end = min(total, s0 + room)
-    dur = end - s0
-    body = work / f"{tag}_body.mp4"
-    run(["ffmpeg", "-y", "-ss", f"{s0:.2f}", "-i", clean_video, "-t", f"{dur:.2f}",
-         "-vf", "scale=-2:1920,crop=1080:1920,eq=contrast=1.05", "-c:v", "libx264", "-preset", "veryfast",
-         "-crf", "19", "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2", body])
-    parts.append(body)
-    caps += [(s + t, e + t, x, st) for s, e, x, st in chunk_captions(scenes, starts, durs, s0, end)]
-    t += dur
-    if loop:
-        last = max([i for i in range(len(scenes)) if starts[i] < end] or [idxs[0]])
-        parts.append(short_piece(scenes[last], lw, loop_d, work, work / f"{tag}_loop.mp4", last))
-        caps += line_captions(loop, t, loop_d)
-        t += loop_d
+            if dt.datetime.fromisoformat(r["date"]) >= since:
+                names += [t for t in (r.get("topic", ""), r.get("wikipedia", "")) if t]
+        except (KeyError, ValueError):
+            continue
+    return {norm_topic(t) for t in names}, names
+
+
+def pick_short_styles():
+    """All 5 styles, the one used longest ago first: the day's 2 Shorts never share a style, and the
+    styles take turns day after day."""
+    last = {}
+    for i, r in enumerate(shorts_log()):
+        last[r.get("style")] = i
+    return sorted(SHORT_STYLES, key=lambda s: last.get(s, -1))
+
+
+def short_candidates(style, avoid_names):
+    if style == "on_this_day":
+        return [{"name": t, "wikipedia": t, "why": d} for t, d in on_this_day(days=1, limit=15)]
+    try:
+        got = ask_json(f"""You find topics for 40-second YouTube Shorts on a dark-history channel.
+Style: {SHORT_STYLES[style]}.
+List 10 REAL, well-documented events of this kind, each with its own English Wikipedia article. Mix famous
+and little-known ones, all before the year 2000. Never: living wars or conflicts, politics, race, religion,
+terrorism, shootings, genocide or massacres.
+Never any of these (already used): {'; '.join(avoid_names[-80:]) or 'none'}
+Return ONLY JSON: {{"topics": [{{"name": "short name, 2-5 words", "wikipedia": "exact English Wikipedia article title"}}]}}""",
+                       keys=("topics",), max_tokens=1500)
+    except Exception as e:
+        log(f"Short topics ({style}) failed: {e}")
+        return []
+    out = []
+    for t in got.get("topics") or []:
+        if isinstance(t, dict) and text(t.get("name")) and text(t.get("wikipedia")):
+            out.append({"name": text(t["name"]), "wikipedia": text(t["wikipedia"]), "why": ""})
+    return out
+
+
+def pick_short_topic(style, used, names):
+    """The first candidate that is new (6-month rule), not sensitive and has a real Wikipedia article."""
+    for c in short_candidates(style, names):
+        if {norm_topic(c["name"]), norm_topic(c["wikipedia"])} & used:
+            continue
+        if SENSITIVE.search(f"{c['name']} {c['wikipedia']} {c.get('why', '')}"):
+            continue
+        facts = wiki_extract(c["wikipedia"], chars=7000)
+        wt = LAST_WIKI["title"]
+        if len(facts) < 1200 or norm_topic(wt) in used or SENSITIVE.search(wt):
+            continue
+        return {**c, "wikipedia": wt, "facts": facts}
+    return None
+
+
+def write_short_script(pick, style, other_titles=()):
+    """One complete Short: 7-9 spoken lines (95-110 words), hook first, every line backed by the facts."""
+    facts, note = pick["facts"], ""
+    otd = ""
+    if style == "on_this_day":
+        otd = ('\n- The hook says it happened on this day, e.g. "On this day in 1912, ..." (the year must be in '
+               'the facts).')
+    for attempt in range(3):
+        o = ask_json(f"""You write a complete 40-second YouTube Short for the dark-history channel {CHANNEL}.
+STYLE: {SHORT_STYLES[style].format(date=dt.date.today().strftime('%B %d'))}
+STORY: {pick['name']}{(' - ' + pick['why']) if pick.get('why') else ''}
+It is ONE complete true story on its own - what happened, the twist, the ending. Someone who has never seen
+anything else from us understands all of it. Use ONLY facts from the SOURCE FACTS: no invented names,
+numbers, dates, quotes or scenes; a theory or legend must be called a theory or legend.
+- 7 to 9 short spoken lines, 95 to 110 words in total (35-45 seconds), simple gripping English.
+- Line 1 = the hook, heard on the very first frame: a jolt or a question, max 14 words, says briefly
+  who / where / when. No greeting, no "in this video", no slow start. Its "query" is the most dramatic
+  shot of the story.{otd}
+- The last line flows straight back into the hook when the Short replays.
+- Title: a secret or a question like our best Shorts "The Night the Mob Came", "What Killed United Air
+  Lines", "What Vanished Over the Atlantic". Max 50 characters. It must NOT start with the famous name.
+  Different from: {'; '.join(other_titles) or 'none'}
+- For every line a real-footage search: "query" (2-4 English words for stock footage that SHOWS what the
+  line says, in the right era - never modern things), "query2" (2-3 more general words), "film" (2-4 words
+  to find real old film of it on Wikimedia Commons, or ""), "archive" (2-5 words for a real photo of a
+  named person, ship, place or object, or "").
+{note}
+SOURCE FACTS (Wikipedia: {pick['wikipedia']}):
+{facts}
+
+Return ONLY JSON: {{"title": "...", "key_quote": "8-25 words copied EXACTLY from the SOURCE FACTS that prove the story's main claim",
+"description": "2-3 true sentences for the YouTube description", "hashtag": "one specific hashtag, e.g. #MaryCeleste",
+"lines": [{{"text": "...", "query": "...", "query2": "...", "film": "...", "archive": "..."}}]}}""",
+                     keys=("lines", "title"), max_tokens=2500)
+        lines = [l for l in o.get("lines") or [] if isinstance(l, dict) and text(l.get("text"))]
+        words = sum(len(text(l["text"]).split()) for l in lines)
+        if not quote_found(text(o.get("key_quote")), facts):
+            note = "Your last script's main claim was not backed by the SOURCE FACTS. Use only what they say."
+            log(f"Short script ({pick['name']}): main claim not found in the facts - writing again")
+            continue
+        if not (80 <= words <= 125 and len(lines) >= 5):
+            note = f"Your last script had {words} words in {len(lines)} lines - it must be 95-110 words in 7-9 lines."
+            log(f"Short script ({pick['name']}): {words} words - writing again")
+            continue
+        break
+    else:
+        raise RuntimeError(f"no usable Short script for {pick['name']}")
+    scenes = [{"ur": text(l["text"]), "type": "video", "query": text(l.get("query")) or "dark night storm",
+               "query2": text(l.get("query2")) or "dark fog", "film": text(l.get("film")),
+               "archive": text(l.get("archive")), "prompt": "", "chapter": 0, "hit": i == 0}
+              for i, l in enumerate(lines)]
+    head = {"ur": text(o.get("title"))}  # the title is checked against the facts like a narration line
+    fact_check(scenes + [head], facts)
+    title = short_title(head["ur"], pick["name"]) or "What Really Happened That Night?"
+    tag = "#" + re.sub(r"[^A-Za-z0-9]", "", text(o.get("hashtag")) or pick["name"])
+    return {"title": title, "scenes": scenes, "description": text(o.get("description")), "hashtag": tag}
+
+
+def fit_short_audio(wavs, durs, work):
+    """35-45 s: a slightly faster read (max 12%) when too long, a little more air between lines when
+    too short; far outside the range -> the script is written again."""
+    total = sum(durs)
+    if total > SHORT_MAX:
+        tempo = total / SHORT_MAX
+        if tempo > 1.12:
+            raise RuntimeError(f"Short too long ({total:.1f}s)")
+        for i, w in enumerate(wavs):
+            fast = w.with_name(w.stem + "_f.wav")
+            run(["ffmpeg", "-y", "-i", w, "-af", f"atempo={tempo:.4f}", fast])
+            wavs[i], durs[i] = fast, duration(fast)
+    elif total < SHORT_MIN:
+        add = (SHORT_MIN - total) / len(wavs)
+        if add > 0.8:
+            raise RuntimeError(f"Short too short ({total:.1f}s)")
+        for i, w in enumerate(wavs):
+            pad = w.with_name(w.stem + "_p.wav")
+            run(["ffmpeg", "-y", "-i", w, "-af", f"apad=pad_dur={add + 0.05:.3f}", pad])
+            wavs[i], durs[i] = pad, duration(pad)
+    return wavs, durs
+
+
+def concat_short(parts, caps, work, tag):
+    """Joins the 9:16 pieces and burns in the big centred captions."""
     ass = work / f"{tag}.ass"
     caption_file(caps, ass, 1080, 1920, 150)
     subs = str(ass).replace("\\", "/").replace(":", "\\:")
@@ -2500,8 +2583,78 @@ def render_short(story, clean_video, work, starts, durs, total, which, k):
     run(["ffmpeg", "-y", *ins, "-filter_complex", fc, "-map", "[v]", "-map", "[a]",
          "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-b:a", "160k",
          "-movflags", "+faststart", out])
-    log(f"Short ready: {out.name} ({t:.1f}s, hook={'yes' if hook else 'no'}, loop={'yes' if loop else 'no'})")
     return out
+
+
+def render_story_short(script, work, k, offline):
+    """Every line in the documentary's voice over its own real clip; the hook (with a hit) first."""
+    tag = f"short{k}"
+    sdir = work / tag
+    sdir.mkdir(exist_ok=True)
+    scenes = script["scenes"]
+    wavs = [sdir / f"l{i:02d}.wav" for i in range(len(scenes))]
+    durs = [voice_line(sc["ur"], w, work) for sc, w in zip(scenes, wavs)]
+    wavs, durs = fit_short_audio(wavs, durs, work)
+    saved, old = SYNTHETIC["on"], os.environ.get("AI_PICTURES")
+    os.environ["AI_PICTURES"] = "off"  # Shorts: real footage and photos only, never AI pictures
+    try:
+        credits = gather_visuals(scenes, sdir, offline, durs)
+    finally:
+        SYNTHETIC["on"] = saved  # the documentary's own label stays as it was
+        if old is None:
+            os.environ.pop("AI_PICTURES", None)
+        else:
+            os.environ["AI_PICTURES"] = old
+    parts, caps, t = [], [], 0.0
+    for i, (sc, w, d) in enumerate(zip(scenes, wavs, durs)):
+        parts.append(short_piece(sc, w, d, work, sdir / f"{tag}_p{i:02d}.mp4", i, hit=(i == 0)))
+        caps += line_captions(sc["ur"], t, d)
+        t += d
+    out = concat_short(parts, caps, work, tag)
+    log(f"Short ready: {out.name} ({t:.1f}s, {len(scenes)} lines, '{script['title']}')")
+    return out, credits
+
+
+def make_daily_shorts(story, work, offline):
+    """The day's 2 Shorts: each its own story, style and topic (never the documentary's)."""
+    if offline:
+        return []
+    used, names = short_used_topics([story.get("topic", ""), story.get("wikipedia", "")])
+    out = []
+    for style in pick_short_styles():
+        if len(out) >= SHORTS_COUNT:
+            break
+        try:
+            pick = pick_short_topic(style, used, names)
+            if not pick:
+                log(f"Short ({style}): no new topic found")
+                continue
+            log(f"Short {len(out) + 1} ({style}): {pick['name']} (Wikipedia '{pick['wikipedia']}')")
+            for attempt in range(2):
+                script = write_short_script(pick, style, [s["title"] for s in out])
+                try:
+                    path, credits = render_story_short(script, work, len(out), offline)
+                    break
+                except RuntimeError as e:
+                    if "Short too" not in str(e) or attempt:
+                        raise
+                    log(f"{e} - writing it again")
+        except Exception as e:
+            log(f"Short ({style}) failed: {str(e)[:300]}")
+            continue
+        used |= {norm_topic(pick["name"]), norm_topic(pick["wikipedia"])}
+        names.append(pick["name"])
+        out.append({"path": path, "credits": credits, "style": style, "topic": pick["name"],
+                    "wikipedia": pick["wikipedia"], **script})
+    return out
+
+
+def short_description(sh, credits, doc_vid=""):
+    src = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(sh['wikipedia'].replace(' ', '_'))}"
+    body = (f"{sh['description']}\n\nThe true story of {sh['topic']}.\nSource: {src}").strip()
+    extra = f"Today's full documentary: https://youtu.be/{doc_vid}\n\n" if doc_vid else ""
+    return description({"description": body, "hashtags": [sh["hashtag"], "#darkhistory", "#shorts"]},
+                       credits, extra, synthetic=False)
 
 
 # =============================================================== 5. THUMBNAIL
@@ -2560,9 +2713,10 @@ def yt_token():
     return r["access_token"]
 
 
-def yt_upload(tok, video, title, desc, tags, publish_at=None, thumb=None):
+def yt_upload(tok, video, title, desc, tags, publish_at=None, thumb=None, synthetic=None):
+    synthetic = SYNTHETIC["on"] if synthetic is None else synthetic
     status = {"privacyStatus": PRIVACY, "selfDeclaredMadeForKids": False, "embeddable": True,
-              "containsSyntheticMedia": bool(SYNTHETIC["on"])}  # true only if a realistic AI scene is in it
+              "containsSyntheticMedia": bool(synthetic)}  # true only if a realistic AI scene is in it
     if publish_at and PRIVACY == "public":
         status["privacyStatus"] = "private"
         status["publishAt"] = publish_at
@@ -2731,14 +2885,15 @@ def chapter_lines(story, starts):
     return "Chapters:\n" + "\n".join(out) + "\n\n" if len(out) >= 3 else ""
 
 
-def description(story, credits, extra=""):
+def description(story, credits, extra="", synthetic=None):
     """Music credit comes right after the intro so YouTube's 5000-character limit can only ever cut the
     footage list, never the attribution the music licence requires."""
+    synthetic = SYNTHETIC["on"] if synthetic is None else synthetic
     tags = " ".join(story.get("hashtags", [])[:3])
     head = (f"{story['description'].strip()}\n\n{extra}"
             f"Subscribe to {CHANNEL} for the stories history tried to forget.\n\n"
             f"Narration: {'English' if LANG == 'en' else 'Urdu'}."
-            + (" Some scenes are AI-generated illustrations of historical events." if SYNTHETIC["on"] else "")
+            + (" Some scenes are AI-generated illustrations of historical events." if synthetic else "")
             + "\n\n"
             + "".join(c + "\n\n" for c in MUSIC_CREDIT))
     tail = "".join(c + "\n" for c in SFX_CREDITS[:15]) + f"\n{tags}"
@@ -2833,17 +2988,14 @@ def main():
     long_v, clean_v, credits, starts, durs, total = render_long(story, work, a.offline)
     srt = make_srt(story["scenes"], starts, durs, work / "captions.srt")
     thumb = thumbnail(story, work, a.offline)
-    shorts = []
-    for k, sh in enumerate(story["shorts"][:SHORTS_COUNT]):
-        title = sh.get("title") or story["title"]
-        shorts.append((render_short(story, clean_v, work, starts, durs, total, sh, k), title))
+    shorts = make_daily_shorts(story, work, a.offline)  # own stories, not cut from the documentary
 
     frames = [grab(long_v, total * f, work / f"pv{n}.jpg") for n, f in enumerate((0.05, 0.3, 0.55, 0.8))]
-    frames += [grab(s[0], 4, work / f"pvs{n}.jpg") for n, s in enumerate(shorts)] + [thumb]
+    frames += [grab(s["path"], 4, work / f"pvs{n}.jpg") for n, s in enumerate(shorts)] + [thumb]
     preview(frames, DATA / "previews" / "latest.jpg")
     log(f"Long video ready: {total / 60:.1f} min, {len(shorts)} shorts")
 
-    results = []
+    results, short_rows = [], []
     if not (a.offline or a.no_upload):
         tok = yt_token()
         vid, st = yt_upload(tok, long_v, story["title"], description(story, credits, chapter_lines(story, starts)),
@@ -2854,18 +3006,18 @@ def main():
         add_to_series(tok, vid, story.get("series"))
         post_question(tok, vid, story.get("comment_question"))
         now = dt.datetime.now(dt.timezone.utc)
-        for k, (sv, stitle) in enumerate(shorts):
+        for k, sh in enumerate(shorts):
             when = (now + dt.timedelta(hours=4 + 5 * k)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-            t = stitle if "#shorts" in stitle.lower() else f"{stitle} #shorts"
-            # the famous name lives in the description, hashtags and tags (not at the start of the title)
-            name = story["topic"]
-            extra = f"The true story of {name}.\nFull documentary: https://youtu.be/{vid}\n\n"
-            stags = [f"#{re.sub(r'[^A-Za-z0-9]', '', name)}"] + [h for h in story.get("hashtags", [])][:2]
+            t = f"{sh['title']} #shorts"
+            # the famous name lives in the description, hashtag and tags (not at the start of the title)
             try:
-                svid, sst = yt_upload(tok, sv, t, description({**story, "hashtags": stags}, credits, extra),
-                                      [name] + [x for x in story.get("tags", []) if x.lower() != name.lower()],
-                                      publish_at=when)
+                svid, sst = yt_upload(tok, sh["path"], t, short_description(sh, sh["credits"], vid),
+                                      [sh["topic"], "dark history", "history shorts", "true story",
+                                       sh["style"].replace("_", " ")], publish_at=when, synthetic=False)
                 results.append(("short", t, sst, svid))
+                short_rows.append({"date": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                                   "style": sh["style"], "topic": sh["topic"], "wikipedia": sh["wikipedia"],
+                                   "title": sh["title"], "video": f"https://youtu.be/{svid}"})
             except Exception as e:
                 log(f"Short upload failed: {e}")
 
@@ -2888,9 +3040,21 @@ def main():
         with open(DATA / "upload_log.csv", "a", encoding="utf-8") as f:
             for kind, t, st, vid in results:
                 f.write(f"{dt.datetime.now(dt.timezone.utc).isoformat()},{kind},\"{t}\",{st},https://youtu.be/{vid}\n")
-    keep = {"long.mp4", "thumb.jpg", "story.json", "captions.srt"} | {s[0].name for s in shorts}
+    if short_rows:  # Shorts topics: never again within 6 months
+        import csv
+        sf = DATA / "shorts_log.csv"
+        new = not sf.exists()
+        with open(sf, "a", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=SHORTS_LOG_FIELDS)
+            if new:
+                w.writeheader()
+            w.writerows(short_rows)
+    import shutil
+    keep = {"long.mp4", "thumb.jpg", "story.json", "captions.srt"} | {s["path"].name for s in shorts}
     for p in work.iterdir():
-        if p.name not in keep:
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.name not in keep:
             p.unlink(missing_ok=True)
 
 

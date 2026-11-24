@@ -94,7 +94,7 @@ jobs:
             for f in topics_log.csv next_topic.json series_playlists.csv; do
               if [ -f "/tmp/run-data/$f" ]; then cp "/tmp/run-data/$f" "data/$f"; fi
             done
-            for f in topics_done.txt upload_log.csv topic_views.csv; do
+            for f in topics_done.txt upload_log.csv topic_views.csv shorts_log.csv; do
               [ -f "/tmp/run-data/$f" ] || continue
               touch "data/$f"
               grep -vxF -f "data/$f" "/tmp/run-data/$f" >> "data/$f" || true
