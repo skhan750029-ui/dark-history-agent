@@ -1,84 +1,60 @@
-[23:48:19] Topic promised by the last video: St. Valentine's Day Massacre
-[23:48:19] Topic (evergreen, series Nights That Shook America): St. Valentine's Day Massacre - best YouTube video 2,217,383 views, 9 over 100k
-[23:48:20] YouTube views for 'Operation Mincemeat': best 3,385,446, 19 videos over 100k
-[23:48:20] Topic (evergreen, series Secrets of War): Operation Mincemeat - best YouTube video 3,385,446 views, 19 over 100k
-[23:48:20] Facts source: Wikipedia 'Operation Mincemeat' (37537 chars)
-[23:48:20] Facts source: Wikipedia 'Saint Valentine's Day Massacre' (26147 chars)
-[23:48:21] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
-[23:48:24] AI writer ok: groq openai/gpt-oss-120b
-[23:48:32] groq openai/gpt-oss-120b: empty answer
-[23:48:39] groq openai/gpt-oss-20b: empty answer
-[23:48:42] AI writer ok: groq qwen/qwen3.8-27b
-[23:48:42] Story attempt 1 failed: topic tied to a living conflict, picking another: St. Valentine's Day Massacre
-[23:48:42] YouTube views for 'Great Molasses Flood': best 3,079,539, 8 videos over 100k
-[23:48:42] Topic (evergreen, series Nights That Shook America): Great Molasses Flood - best YouTube video 3,079,539 views, 8 over 100k
-[23:48:43] YouTube views for 'Halifax Explosion 1917': best 2,705,838, 11 videos over 100k
-[23:48:43] Topic (evergreen, series Secrets of War): Halifax Explosion - best YouTube video 2,705,838 views, 11 over 100k
-[23:48:43] Facts source: Wikipedia 'Halifax Explosion' (37844 chars)
-[23:48:45] Facts source: Wikipedia 'Great Molasses Flood' (12401 chars)
-[23:48:45] Waiting 18s for openai/gpt-oss-120b token budget
-[23:49:06] AI writer ok: groq openai/gpt-oss-120b
-[23:49:06] Topic: Great Molasses Flood (evergreen) | Great Molasses Flood: The Temperature Trigger That Killed 21 | angle: The disaster was likely triggered by a sudden temperature rise that caused thermal expansion of older molasses, fracturing the already weakened tank walls.
-[23:49:09] Waiting 26s for openai/gpt-oss-120b token budget
-[23:49:40] Chapter 1: 14 scenes
-[23:49:40] Chapter 2: 13 scenes
-[23:49:43] Waiting 35s for openai/gpt-oss-120b token budget
-[23:50:23] Chapter 3: 13 scenes
-[23:50:23] Chapter 4: 13 scenes
-[23:50:26] Waiting 36s for openai/gpt-oss-120b token budget
-[23:51:04] Chapter 5: 13 scenes
-[23:51:04] Note: chapter 4 has no exact year in it
-[23:51:07] Waiting 31s for openai/gpt-oss-120b token budget
-[23:51:42] Fact fix line 1: Incorrect time of day
-[23:51:42] Fact fix line 4: Unsupported claim about steel thickness
-[23:51:42] Fact fix line 12: Unsubstantiated foundation failure
-[23:51:42] Fact fix line 28: Imaginary sky description
-[23:51:42] Fact fix line 29: Unverified workers’ whisper
-[23:51:42] Fact fix line 33: Dramatized horse death not in facts
-[23:51:42] Fact fix line 34: Invented debris details
-[23:51:42] Fact fix line 35: Unverified fog and bells description
-[23:51:42] Fact fix line 39: Incorrect claim about bolted plates
-[23:51:42] Fact fix line 40: Imagined hidden ledger
-[23:51:42] Fact fix line 49: Unverified court date
-[23:51:42] Fact fix line 50: Incorrect detail about rivets vs bolts
-[23:51:42] Fact fix line 60: Unsubstantiated substandard rivets and foundation
-[23:51:42] Fact fix line 61: Unsupported claim about code changes
-[23:51:42] Fact fix line 62: Unverified 1930 regulation outcome
-[23:51:42] Fact fix line 68: Dramatic phrasing not factual
-[23:51:42] Fact check: 16 line(s) corrected (1555 -> 1413 words)
-[23:51:42] Story written with 9 AI requests
-[23:51:42] Voice for 68 scenes...
-[23:53:03] Voice: google, 5 requests for 68 scenes
-[23:53:03] Narration: 9.6 min
-[23:53:27] Caption sync: 1320/1372 words matched to the voice
-[23:53:27] Visuals...
-[23:53:29] Visuals 1/68
-[23:53:53] Visuals 11/68
-[23:54:08] Visuals 21/68
-[23:54:28] Visuals 31/68
-[23:54:49] Visuals 41/68
-[23:55:15] Visuals 51/68
-[23:55:31] Visuals 61/68
-[23:55:43] Visuals for 68/68 scenes - historical film 0, stock video 49, archive photos 15, other pictures 4 (AI-made 0)
-[23:55:43] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
-[23:55:43] Scene clips...
-[23:55:46] Clip 1/68
-[23:56:33] Clip 11/68
-[23:57:18] Clip 21/68
-[23:58:06] Clip 31/68
-[23:59:02] Clip 41/68
-[23:59:54] Clip 51/68
-[00:00:46] Clip 61/68
-[00:01:23] Music: track.mp3 ['Music: "Mistake the Getaway" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
-[00:04:45] Sound effects: air rush, ambient city, boom crash, children laughing, church bells, cold wind, computer hum, crowd murmur, dark drone, dawn birds, deep rumble, distant thunder, dripping liquid, explosion roar, footsteps hurried, footsteps mud, gavel bang, ground rumble, heartbeat, heavy breathing, horse whinny, li
-[00:04:49] Final long render...
-[00:28:02] Short ready: short0.mp4 (43.6s, hook=yes, loop=yes)
-[00:29:17] Short ready: short1.mp4 (44.5s, hook=yes, loop=yes)
-[00:29:20] Long video ready: 9.6 min, 2 shorts
-[00:29:23] Uploaded https://youtu.be/o0Uf8da_N-Q (public)
-[00:29:26] Thumbnail set
-[00:29:27] Subtitles (CC) uploaded
-[00:29:27] Added to playlist 'Nights That Shook America'
-[00:29:28] Comment posted: Do you think the tank's design flaws were the real cause of the disaster?
-[00:29:30] Uploaded https://youtu.be/pNZygHbG9Q0 (private, publishes 2026-11-23T04:29:28Z)
-[00:29:31] Uploaded https://youtu.be/AP93UWBU7A0 (private, publishes 2026-11-23T09:29:28Z)
+[02:35:04] Topic promised by the last video: Halifax Explosion
+[02:35:04] Topic (evergreen, series Secrets of War): Halifax Explosion - best YouTube video 2,705,838 views, 11 over 100k
+[02:35:05] Wikipedia top views 2026-11-23 failed: HTTP Error 404: Not Found
+[02:35:18] Trend signals: 15 YouTube, 7 Wikipedia, 10 anniversaries
+[02:35:19] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[02:35:20] AI writer ok: groq openai/gpt-oss-120b
+[02:35:20] YouTube views for 'China Southern Flight 3943 crash documentary': best 6,840, 0 videos over 100k
+[02:35:20] Trending topic 'China Southern 3943' skipped: not enough views on YouTube (best 6,840)
+[02:35:21] YouTube views for 'USS Indianapolis sinking mystery': best 1,502,172, 4 videos over 100k
+[02:35:21] Topic (trending, series Lost at Sea): USS Indianapolis - best YouTube video 1,502,172 views, 4 over 100k
+[02:35:21] Facts source: Wikipedia 'USS Indianapolis (CA-35)' (35829 chars)
+[02:35:22] Facts source: Wikipedia 'Halifax Explosion' (37844 chars)
+[02:35:23] Waiting 15s for openai/gpt-oss-120b token budget
+[02:35:42] Topic: Halifax Explosion (evergreen) | Halifax Explosion: The Coal Delay That Triggered the Blast | angle: The explosion was triggered by a scheduling clash caused by the Imo’s delayed coal loading after the anti‑submarine nets were raised, forcing both ships into a 
+[02:35:45] Waiting 26s for openai/gpt-oss-120b token budget
+[02:36:16] Chapter 1: 14 scenes
+[02:36:16] Chapter 2: 13 scenes
+[02:36:19] Waiting 28s for openai/gpt-oss-120b token budget
+[02:36:51] Chapter 3: 13 scenes
+[02:36:51] Chapter 4: 13 scenes
+[02:36:54] Waiting 39s for openai/gpt-oss-120b token budget
+[02:37:35] Chapter 5: 13 scenes
+[02:37:38] Waiting 35s for openai/gpt-oss-120b token budget
+[02:38:15] Fact check: 0 line(s) corrected (1472 -> 1472 words)
+[02:38:15] Story written with 6 AI requests
+[02:38:15] Voice for 68 scenes...
+[02:39:38] Voice: google, 5 requests for 68 scenes
+[02:39:38] Narration: 9.8 min
+[02:39:56] Caption sync: 1345/1440 words matched to the voice
+[02:39:56] Visuals...
+[02:39:59] Visuals 1/68
+[02:40:34] Visuals 11/68
+[02:41:07] Visuals 21/68
+[02:41:27] Visuals 31/68
+[02:41:50] Visuals 41/68
+[02:42:17] Visuals 51/68
+[02:42:45] Visuals 61/68
+[02:43:04] Visuals for 68/68 scenes - historical film 2, stock video 49, archive photos 14, other pictures 3 (AI-made 0)
+[02:43:04] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[02:43:04] Scene clips...
+[02:43:07] Clip 1/68
+[02:43:50] Clip 11/68
+[02:44:29] Clip 21/68
+[02:45:02] Clip 31/68
+[02:45:41] Clip 41/68
+[02:46:25] Clip 51/68
+[02:47:08] Clip 61/68
+[02:47:39] Music: track.mp3 ['Music: "Ossuary 6 - Air" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
+[02:50:41] Sound effects: air whoosh, bell toll, birds chirping, boat creak, candle flicker, chemical hiss, crackling fire, crowd murmur, crowd murmuring, dark drone, engine rumble, explosion boom, flag flapping, flare pop, footsteps snow, gavel bang, gavel strike, glass crash, heartbeat, hissing, low drone, metal clang, met
+[02:50:44] Final long render...
+[03:09:48] Short ready: short0.mp4 (35.2s, hook=yes, loop=yes)
+[03:10:38] Short ready: short1.mp4 (38.9s, hook=yes, loop=yes)
+[03:10:40] Long video ready: 9.8 min, 2 shorts
+[03:10:45] Uploaded https://youtu.be/93Y3LTTvHJo (public)
+[03:10:48] Thumbnail set
+[03:10:48] Subtitles (CC) uploaded
+[03:10:49] Added to playlist 'Secrets of War'
+[03:10:50] Comment posted: Did you know the Imo’s delayed departure helped set the stage for the explosion?
+[03:10:52] Uploaded https://youtu.be/Y5Ye9_BOqbo (private, publishes 2026-11-24T07:10:50Z)
+[03:10:55] Uploaded https://youtu.be/zVFqQ9pUqMc (private, publishes 2026-11-24T12:10:50Z)
