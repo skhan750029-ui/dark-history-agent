@@ -753,6 +753,102 @@ def short_title(title, name):
     return t[:1].upper() + t[1:] if t else ""
 
 
+STOP = {"the", "and", "that", "this", "with", "from", "they", "were", "their", "which", "when", "what", "into",
+        "after", "about", "there", "would", "could", "have", "been", "over", "only", "then", "than", "them",
+        "chapter", "story", "night", "video", "while", "where", "these", "those", "some", "more", "most"}
+
+
+def fact_paragraphs(full):
+    """Article paragraphs (section headings '== X ==' are kept with the paragraph after them)."""
+    out, head = [], ""
+    for p in (full or "").split("\n"):
+        p = p.strip()
+        if not p:
+            continue
+        if re.fullmatch(r"=+\s*[^=]+?\s*=+", p):
+            head = p.strip("= ").strip()
+            continue
+        out.append((head, p))
+    return out
+
+
+def fact_digest(full, limit=7000):
+    """The whole article in short: the lead, then the start of every section (for planning the chapters)."""
+    paras = fact_paragraphs(full)
+    out, seen = [], set()
+    for head, p in paras:
+        if not head:
+            out.append(p)
+        elif head not in seen:
+            seen.add(head)
+            out.append(f"[{head}] {p[:450]}")
+    txt = ""
+    for p in out:
+        if len(txt) + len(p) + 1 > limit:
+            break
+        txt += p + "\n"
+    return txt.strip() or (full or "")[:limit]
+
+
+def relevant_facts(full, about, limit=7000):
+    """The article's lead + the paragraphs that share the most key words with `about` (a chapter plan,
+    the narration or a title), in the article's own order."""
+    paras = fact_paragraphs(full)
+    if not paras:
+        return (full or "")[:limit]
+    words = {w for w in re.findall(r"[a-z0-9]{4,}", (about or "").lower()) if w not in STOP}
+    lead = [i for i, (h, _) in enumerate(paras) if not h][:4]
+    score = {i: len(words & set(re.findall(r"[a-z0-9]{4,}", p.lower()))) for i, (_, p) in enumerate(paras)}
+    take, size = set(lead), sum(len(paras[i][1]) for i in lead)
+    for i in sorted(score, key=lambda i: -score[i]):
+        if i in take or score[i] == 0:
+            continue
+        if size + len(paras[i][1]) > limit:
+            continue
+        take.add(i)
+        size += len(paras[i][1])
+    return "\n".join((f"[{paras[i][0]}] " if paras[i][0] else "") + paras[i][1] for i in sorted(take))[:limit + 2000]
+
+
+def verify_title(title, full, name, short=False):
+    """The title must say only what the facts back up (with words copied from the article as proof).
+    If not, the AI rewrites it and it is checked again; a title that cannot be backed up stops the upload."""
+    rule = ("a secret / question title like 'The Night the ...' or 'What Killed ...', max 50 characters, NOT "
+            f"starting with '{name}'" if short else f"it must start with '{name}: ', max 60 characters, Title Case")
+    for attempt in range(3):
+        facts = relevant_facts(full, title, 7000)
+        try:
+            got = ask_json(f"""Check this YouTube title against the SOURCE FACTS of a history channel.
+TITLE: {title}
+The title is NOT supported if it states or clearly implies something the facts do not say - a cause, a
+result, a number, a "secret", a blame - or presents a theory as proven. A question is fine if the facts
+discuss that question.
+SOURCE FACTS (Wikipedia):
+{facts}
+Return ONLY JSON: {{"supported": true or false, "problem": "short reason if not supported",
+"quote": "8-25 words copied EXACTLY from the SOURCE FACTS that back up the title",
+"better_title": "only if not supported: a gripping, completely true title - {rule}"}}""",
+                           keys=("supported",), max_tokens=800)
+        except Exception as e:
+            log(f"Title check failed ({e})")
+            got = {}
+        ok = got.get("supported") is True and quote_found(text(got.get("quote")), full)
+        if ok:
+            if attempt:
+                log(f"Title backed by the facts after rewriting: '{title}'")
+            return title
+        log(f"Title not backed by the facts: '{title}' ({text(got.get('problem'), 'no proof in the article')[:150]})")
+        new = text(got.get("better_title"))
+        if short:
+            new = short_title(new, name)
+        elif new and not new.lower().startswith(name.lower()):
+            new = f"{name}: " + re.sub(rf"^\W*{re.escape(name)}\W*", "", new, flags=re.I)
+        if not new or new == title or len(new) > 60:
+            continue
+        title = new
+    raise RuntimeError(f"title could not be backed by the facts - not uploading: '{title}'")
+
+
 def quote_found(quote, facts):
     """The words (or almost all of them, in order) appear in the source text."""
     import difflib
@@ -773,6 +869,11 @@ def fact_check(scenes, facts, title=""):
     if not facts:
         return 0, ""
     numbered = "\n".join(f"{i}. {s['ur']}" for i, s in enumerate(scenes))
+    title_part = (f"""TITLE: {title}
+Also check the TITLE: if it states something the facts do not support (or a disputed theory as proven),
+give a corrected title (same start before the colon, max 60 characters, Title Case, still gripping -
+best as a question or "The Night the ..." / "What Killed ..." - never a flat list like "X and Y").
+""" if title else "")
     try:
         got = ask_json(f"""You are the fact-checker of a history documentary. Compare EVERY numbered narration line
 with the SOURCE FACTS. A line is wrong if it states a name, date, number, place, quote or event that the
@@ -780,16 +881,13 @@ facts do not support, or presents a legend or theory as proven fact. Dramatic wo
 facts are not. For each wrong line give a corrected line of THE SAME LENGTH that only uses supported
 facts (or clearly says "according to legend" / "one theory says"): keep the drama and the storytelling,
 replace only the invented detail with a true detail from the facts. Never just shorten the line.
+List ONLY lines that are really wrong - never a line that is fine or "acceptable".
 SOURCE FACTS (Wikipedia):
 {facts}
 
-TITLE: {title}
 NARRATION:
 {numbered}
-Also check the TITLE: if it states something the facts do not support (or a disputed theory as proven),
-give a corrected title (same start before the colon, max 60 characters, Title Case, still gripping -
-best as a question or "The Night the ..." / "What Killed ..." - never a flat list like "X and Y").
-Return ONLY JSON: {{"fixes": [{{"line": 3, "problem": "short reason", "text": "corrected line"}}],
+{title_part}Return ONLY JSON: {{"fixes": [{{"line": 3, "problem": "short reason", "text": "corrected line"}}],
 "title_fix": "corrected title, or empty if the title is fine"}}
 (an empty fixes list if everything is supported)""", keys=("fixes",), max_tokens=3000)
     except Exception as e:
@@ -802,14 +900,15 @@ Return ONLY JSON: {{"fixes": [{{"line": 3, "problem": "short reason", "text": "c
         except (TypeError, ValueError, AttributeError):
             continue
         new = text(fx.get("text"))
-        if 0 <= i < len(scenes) and new and 0.5 <= len(new) / max(1, len(scenes[i]["ur"])) <= 1.6:
+        if (0 <= i < len(scenes) and new and new.strip() != scenes[i]["ur"].strip()
+                and 0.5 <= len(new) / max(1, len(scenes[i]["ur"])) <= 1.6):
             log(f"Fact fix line {i}: {text(fx.get('problem'))[:120]}")
             scenes[i]["ur"] = new
             n += 1
     log(f"Fact check: {n} line(s) corrected ({before} -> {sum(len(s['ur'].split()) for s in scenes)} words)")
     tfix = text(got.get("title_fix"))
     head = title.split(":")[0].strip().lower()
-    if tfix and tfix != title and len(tfix) <= 60 and tfix.lower().startswith(head):
+    if title and tfix and tfix != title and len(tfix) <= 60 and tfix.lower().startswith(head):
         log(f"Fact check: title changed from '{title}' to '{tfix}'")
         return n, tfix
     return n, ""
@@ -1009,7 +1108,11 @@ def write_story(minutes):
     except Exception as e:
         log(f"Next topic not chosen ({e}) - the video ends with a plain subscribe line")
         nxt = None
-    facts = wiki_extract(pick["wikipedia"] or name, chars=8000)
+    # the WHOLE article: every chapter, the fact check and the title check get the parts they talk about
+    # (before, only the first 8000 characters were used, so the later chapters had no facts and the AI
+    # filled them from imagination)
+    full = wiki_extract(pick["wikipedia"] or name, chars=60000)
+    facts = full[:8000]
     if len(facts) < 1500:
         REJECTED.append(name)
         raise RuntimeError(f"not enough source facts for {name} ({len(facts)} chars) - picking another topic")
@@ -1033,8 +1136,8 @@ twist). Today is {dt.date.today():%d %B %Y}.
 TODAY'S STORY (already chosen - do not change it): {name} (Wikipedia: "{LAST_WIKI['title'] or pick['wikipedia']}")
 {kind_note}
 
-FACTS (Wikipedia - the ONLY facts you may use; nothing from memory):
-{facts[:6000]}
+FACTS (Wikipedia, the whole article in short - the ONLY facts you may use; nothing from memory):
+{fact_digest(full, 7000)}
 {('NEXT VIDEO (already chosen, only for next_teaser): ' + nxt['name'] + chr(10) + 'NEXT VIDEO FACTS: ' + nxt_facts[:1200]) if nxt else ''}
 
 Never invent facts; mark legends and theories clearly as legends/theories. Respect victims: no gore for
@@ -1080,7 +1183,7 @@ Return ONLY JSON:
   "hashtags": ["#darkhistory", "#mystery", "one specific hashtag - 3 in total"],
   "chapters": [{{"title": "short English chapter name", "summary": "3-4 sentences of the facts this chapter tells, with exact names, dates, places"}}]
 }}""", keys=("chapters",), max_tokens=4000)
-        if quote_found(text(outline.get("angle_quote")), facts):
+        if quote_found(text(outline.get("angle_quote")), full):
             break
         log(f"Angle not backed by the facts ({text(outline.get('angle'))[:100]}) - asking again")
         outline_note = ("Your last angle was not backed by the FACTS. Choose an angle you can support with words "
@@ -1150,13 +1253,19 @@ Return ONLY JSON:
         """Narration for these chapters -> {chapter index: [scenes]} (missing chapters are simply absent)."""
         plan = "\n".join(f"{n + 1}. {chapters[i]['title']} - {chapters[i]['summary']}\n   ROLE: {role(i)}"
                          for n, i in enumerate(batch))
+        ch_facts = relevant_facts(full, plan, 7000)  # the parts of the article these chapters are about
         part = ask_json(f"""You write the narration of chapters {batch[0] + 1}-{batch[-1] + 1} of {len(chapters)} of the
 YouTube documentary "{outline['title']}" (story: {outline['topic']}).
 Chapters to write now:
 {plan}
 Story so far (last lines): {previous[-500:] or '(start of the video)'}
-FACTS (Wikipedia - follow these; if the chapter plan disagrees with them, the facts win):
-{facts or '(none - only use facts you are sure of)'}
+FACTS (Wikipedia - the parts of the article about these chapters; if the chapter plan disagrees with
+them, the facts win):
+{ch_facts or '(none - only use facts you are sure of)'}
+TRUTH RULE: every name, date, time, number, place, quote and event you write must be in these FACTS.
+Where the facts give no detail, tell it with general atmosphere (the dark sea, the waiting, the fear)
+WITHOUT inventing details - no made-up times of day, counts, words someone said, weather, ranks or
+thoughts. Never put words in anyone's mouth unless the FACTS quote them.
 
 LENGTH: EACH chapter has EXACTLY {n_sc} scenes, every scene 2 full sentences (about 26 words), so each
 chapter is about {words_per_ch} words. Do not shorten - the video must run {minutes:.0f} minutes. {note}
@@ -1219,9 +1328,12 @@ Return ONLY JSON with one entry per chapter, in order:
         said = " ".join(s["ur"] for s in scenes if s["chapter"] == i)
         if said and not re.search(r"\b1[0-9]{3}\b|\b20[0-2][0-9]\b", said):
             log(f"Note: chapter {i + 1} has no exact year in it")
-    _, tfix = fact_check(scenes, facts, outline["title"])
+    said_all = " ".join(s["ur"] for s in scenes)
+    _, tfix = fact_check(scenes, relevant_facts(full, said_all, 10000), outline["title"])
     if tfix:
         outline["title"] = tfix
+    # the title must be backed by the facts too - rewritten if not; no upload if it can't be fixed
+    outline["title"] = verify_title(outline["title"], full, name)
     if scenes and scenes[0].get("cold_open"):
         outline["hook"] = scenes[0]["ur"]  # the Shorts and title checks use the corrected cold open
     # last words of every video: a true "next time" + a reason to subscribe (added after the fact check,
@@ -2449,9 +2561,59 @@ def pick_short_styles():
     return sorted(SHORT_STYLES, key=lambda s: last.get(s, -1))
 
 
+# On This Day: only real dark EVENTS - accidents, disasters, murders, wartime massacres, disappearances -
+# and the linked article must be about the event itself, never about an organisation, place or thing
+DARK_EVENT = re.compile(DARK.pattern + r"|massacre|shipwreck|derail|earthquake|tsunami|hurricane|avalanche|"
+                        r"blizzard|inferno|fire\b|blaze|bombing|fatal|killed|died|deaths|victims|missing", re.I)
+THING = re.compile(r"\b(air forces?|warfare branch|army|navy|military branch|organi[sz]ation|company|corporation|"
+                   r"agency|airline|manufacturer|political party|government|ministry|university|newspaper|"
+                   r"country|city|town|village|capital|province|human settlement|politician|aircraft family|"
+                   r"class of|actor|actress|singer|writer|footballer|band|film|album)\b", re.I)
+
+
+# the article's first sentence says it is about an organisation / place / thing ("X is a city in ...")
+LEAD_THING = re.compile(r"^[^.]{0,120}?\b(?:is|was|are|were)\s+(?:an?|the)\s+[^.]{0,50}?\b(air forces?|army|navy|"
+                        r"organi[sz]ation|company|corporation|agency|airline|manufacturer|political party|"
+                        r"government|ministry|university|newspaper|country|city|town|village|province|"
+                        r"politician|military unit|squadron|regiment|aircraft|ship class)\b", re.I)
+
+
+def otd_sensitive(txt):
+    """The usual sensitive-topic rule, except that massacres in past wars may be told on their date."""
+    return SENSITIVE.search(re.sub(r"massacre\w*|atrocit\w*", " ", txt or "", flags=re.I))
+
+
+def otd_events(d=None, limit=20):
+    """Today's date in history: dark events of every past year, each with the article about the event."""
+    d = d or dt.date.today()
+    out = []
+    for kind in ("selected", "events"):
+        try:
+            evs = http(f"https://en.wikipedia.org/api/rest_v1/feed/onthisday/{kind}/{d:%m}/{d:%d}",
+                       timeout=30).get(kind, [])
+        except Exception as e:
+            log(f"On-this-day {kind} {d} failed: {e}")
+            continue
+        for ev in evs:
+            txt = ev.get("text", "")
+            if ev.get("year", 3000) > 2000 or not DARK_EVENT.search(txt):
+                continue
+            # the page about the EVENT (its title/description says what happened), never a thing or place
+            pg = next((p for p in ev.get("pages") or []
+                       if DARK_EVENT.search(f"{p.get('title', '')} {p.get('description', '')}")
+                       and not THING.search(p.get("description", ""))), None)
+            if not pg:
+                continue
+            title = (pg.get("normalizedtitle") or pg.get("title", "")).replace("_", " ")
+            if otd_sensitive(f"{txt} {title} {pg.get('description', '')}") or any(o[0] == title for o in out):
+                continue
+            out.append((title, f"{d:%d %B} {ev['year']}: {txt}"))
+    return out[:limit]
+
+
 def short_candidates(style, avoid_names):
-    if style == "on_this_day":
-        return [{"name": t, "wikipedia": t, "why": d} for t, d in on_this_day(days=1, limit=15)]
+    if style == "on_this_day":  # every past year's dark event on today's date, one after another
+        return [{"name": t, "wikipedia": t, "why": d} for t, d in otd_events()]
     try:
         got = ask_json(f"""You find topics for 40-second YouTube Shorts on a dark-history channel.
 Style: {SHORT_STYLES[style]}.
@@ -2472,17 +2634,23 @@ Return ONLY JSON: {{"topics": [{{"name": "short name, 2-5 words", "wikipedia": "
 
 
 def pick_short_topic(style, used, names):
-    """The first candidate that is new (6-month rule), not sensitive and has a real Wikipedia article."""
+    """The first candidate that is new (6-month rule), not sensitive and has a real Wikipedia article
+    (for On This Day: an article about the dark EVENT itself, not about an organisation, place or thing)."""
+    otd = style == "on_this_day"
+    sensitive = otd_sensitive if otd else SENSITIVE.search
     for c in short_candidates(style, names):
         if {norm_topic(c["name"]), norm_topic(c["wikipedia"])} & used:
             continue
-        if SENSITIVE.search(f"{c['name']} {c['wikipedia']} {c.get('why', '')}"):
+        if sensitive(f"{c['name']} {c['wikipedia']} {c.get('why', '')}"):
             continue
-        facts = wiki_extract(c["wikipedia"], chars=7000)
+        full = wiki_extract(c["wikipedia"], chars=60000)
         wt = LAST_WIKI["title"]
-        if len(facts) < 1200 or norm_topic(wt) in used or SENSITIVE.search(wt):
+        if len(full) < 1200 or norm_topic(wt) in used or sensitive(wt):
             continue
-        return {**c, "wikipedia": wt, "facts": facts}
+        if otd and not (DARK_EVENT.search(full[:600]) and not LEAD_THING.search(full[:300])):
+            log(f"On this day: '{wt}' is not an article about a dark event - skipped")
+            continue
+        return {**c, "wikipedia": wt, "facts": fact_digest(full, 7000), "full": full}
     return None
 
 
@@ -2522,7 +2690,7 @@ Return ONLY JSON: {{"title": "...", "key_quote": "8-25 words copied EXACTLY from
                      keys=("lines", "title"), max_tokens=2500)
         lines = [l for l in o.get("lines") or [] if isinstance(l, dict) and text(l.get("text"))]
         words = sum(len(text(l["text"]).split()) for l in lines)
-        if not quote_found(text(o.get("key_quote")), facts):
+        if not quote_found(text(o.get("key_quote")), pick.get("full") or facts):
             note = "Your last script's main claim was not backed by the SOURCE FACTS. Use only what they say."
             log(f"Short script ({pick['name']}): main claim not found in the facts - writing again")
             continue
@@ -2537,9 +2705,11 @@ Return ONLY JSON: {{"title": "...", "key_quote": "8-25 words copied EXACTLY from
                "query2": text(l.get("query2")) or "dark fog", "film": text(l.get("film")),
                "archive": text(l.get("archive")), "prompt": "", "chapter": 0, "hit": i == 0}
               for i, l in enumerate(lines)]
-    head = {"ur": text(o.get("title"))}  # the title is checked against the facts like a narration line
-    fact_check(scenes + [head], facts)
-    title = short_title(head["ur"], pick["name"]) or "What Really Happened That Night?"
+    full = pick.get("full") or facts
+    fact_check(scenes, relevant_facts(full, " ".join(s["ur"] for s in scenes), 8000))
+    # the title is checked on its own: rewritten if the facts don't back it, the Short dropped if still not
+    title = verify_title(short_title(text(o.get("title")), pick["name"]) or "What Really Happened That Night?",
+                         full, pick["name"], short=True)
     tag = "#" + re.sub(r"[^A-Za-z0-9]", "", text(o.get("hashtag")) or pick["name"])
     return {"title": title, "scenes": scenes, "description": text(o.get("description")), "hashtag": tag}
 
