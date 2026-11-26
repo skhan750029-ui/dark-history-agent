@@ -1,1 +1,143 @@
-[02:47:56] Today's documentary is already uploaded - this backup run has nothing to do
+[23:37:26] Topic promised by the last video: Elizabeth Bathory
+[23:37:26] Topic (evergreen, series Unsolved Mysteries): Elizabeth Bathory - best YouTube video 14,150,167 views, 13 over 100k
+[23:37:36] Trend signals: 15 YouTube, 12 Wikipedia, 10 anniversaries
+[23:37:38] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[23:37:40] AI writer ok: groq openai/gpt-oss-120b
+[23:37:40] YouTube views for 'Ethiopian Airlines Flight 961 crash': best 4,365,731, 10 videos over 100k
+[23:37:40] Topic (trending, series Air Disasters): Ethiopian Flight 961 - best YouTube video 4,365,731 views, 10 over 100k
+[23:37:41] Facts source: Wikipedia 'Ethiopian Airlines Flight 961' (12634 chars)
+[23:37:41] Facts source: Wikipedia 'Elizabeth Báthory' (39928 chars)
+[23:37:43] Waiting 15s for openai/gpt-oss-120b token budget
+[23:38:08] groq openai/gpt-oss-120b: empty answer
+[23:38:15] AI writer ok: groq openai/gpt-oss-20b
+[23:38:15] Story attempt 1 failed: topic tied to a living conflict, picking another: Elizabeth Bathory
+[23:38:16] YouTube views for 'Otzi the iceman': best 3,505,778, 4 videos over 100k
+[23:38:16] Topic (evergreen, series Unsolved Mysteries): Otzi the Iceman - best YouTube video 3,505,778 views, 4 over 100k
+[23:38:24] Trend signals: 15 YouTube, 12 Wikipedia, 10 anniversaries
+[23:38:25] AI writer ok: groq openai/gpt-oss-120b
+[23:38:26] YouTube views for 'Soviet Antonov An-12 crash 1985': best 42,191, 0 videos over 100k
+[23:38:26] Trending topic 'Soviet Air Crash 1985' skipped: not enough views on YouTube (best 42,191)
+[23:38:26] YouTube views for 'Ethiopian Airlines Flight 961 hijacking': best 4,365,731, 10 videos over 100k
+[23:38:26] Topic (trending, series Air Disasters): Ethiopian Airlines 961 - best YouTube video 4,365,731 views, 10 over 100k
+[23:38:26] Facts source: Wikipedia 'Ethiopian Airlines Flight 961' (12634 chars)
+[23:38:27] Facts source: Wikipedia 'Ötzi' (26943 chars)
+[23:38:28] Waiting 29s for openai/gpt-oss-120b token budget
+[23:38:59] Topic: Otzi the Iceman (evergreen) | Otzi the Iceman: The Waxed Death Hidden in Ice | angle: Ötzi likely died after months of exposure in water, turning his body into adipocere before freezing, indicating a prolonged struggle before death.
+[23:39:02] Waiting 25s for openai/gpt-oss-120b token budget
+[23:39:32] Chapter 1: 13 scenes
+[23:39:32] Chapter 2: 13 scenes
+[23:39:35] Waiting 32s for openai/gpt-oss-120b token budget
+[23:40:13] Chapter 3: 12 scenes
+[23:40:13] Chapter 4: 12 scenes
+[23:40:16] Waiting 37s for openai/gpt-oss-120b token budget
+[23:40:56] Chapter 5: 13 scenes
+[23:40:56] Note: chapter 2 has no exact year in it
+[23:40:56] Note: chapter 4 has no exact year in it
+[23:40:59] Waiting 41s for openai/gpt-oss-120b token budget
+[23:41:45] Fact fix line 44: No evidence of brain trauma in sources
+[23:41:45] Fact check: 1 line(s) corrected (1321 -> 1320 words)
+[23:41:48] Waiting 40s for openai/gpt-oss-120b token budget
+[23:42:29] Title not backed by the facts: 'Otzi the Iceman: The Waxed Death Hidden in Ice' (Implies a 'waxed death' cause not stated in facts)
+[23:42:33] Title not backed by the facts: 'Otzi the Iceman: Wax‑Like Preservation in Ice' (no proof in the article)
+[23:42:37] Title not backed by the facts: 'Otzi the Iceman: Wax‑Like Preservation in Ice' (no proof in the article)
+[23:42:37] Story attempt 2 failed: title could not be backed by the facts - not uploading: 'Otzi the Iceman: Wax‑Like Preservation in Ice'
+[23:42:37] Topic (evergreen, series Unsolved Mysteries): Otzi the Iceman - best YouTube video 3,505,778 views, 4 over 100k
+[23:42:44] Trend signals: 15 YouTube, 12 Wikipedia, 10 anniversaries
+[23:42:44] Waiting 34s for openai/gpt-oss-120b token budget
+[23:43:20] Topic (trending, series Air Disasters): Korean Air 007 - views not checked
+[23:43:21] Facts source: Wikipedia 'Korean Air Lines Flight 007' (75519 chars)
+[23:43:21] Facts source: Wikipedia 'Ötzi' (26943 chars)
+[23:43:23] Waiting 22s for openai/gpt-oss-120b token budget
+[23:43:48] Angle not backed by the facts (The unfinished arrows suggest Ötzi was ambushed during a failed hunt, not a ritual sacrifice.) - asking again
+[23:43:51] Waiting 44s for openai/gpt-oss-120b token budget
+[23:44:38] Topic: Otzi the Iceman (evergreen) | Otzi the Iceman: The Months He Lingered in Water | angle: Ötzi likely spent months in water before his body finally froze, reshaping theories about his death scene.
+[23:44:41] Waiting 40s for openai/gpt-oss-120b token budget
+[23:45:25] Chapter 1: 13 scenes
+[23:45:25] Chapter 2: 13 scenes
+[23:45:28] Waiting 43s for openai/gpt-oss-120b token budget
+[23:46:18] Chapter 3: 13 scenes
+[23:46:18] Chapter 4: 12 scenes
+[23:46:21] Waiting 38s for openai/gpt-oss-120b token budget
+[23:47:03] Chapter 5: 13 scenes
+[23:47:03] Note: chapter 2 has no exact year in it
+[23:47:03] Note: chapter 4 has no exact year in it
+[23:47:06] Waiting 25s for openai/gpt-oss-120b token budget
+[23:47:36] Fact fix line 7: Incorrect age estimate
+[23:47:36] Fact fix line 9: No evidence of a €150,000 payment
+[23:47:36] Fact fix line 31: Hair analysis of copper and arsenic not documented
+[23:47:36] Fact fix line 37: No copper fragment found near shoulder
+[23:47:36] Fact fix line 42: Adipocere not dated to 3275 BC
+[23:47:36] Fact fix line 45: Thumb cut and head blow not reported
+[23:47:36] Fact fix line 47: No ice‑dating gap reported
+[23:47:36] Fact fix line 48: Body movement by meltwater not proven
+[23:47:36] Fact fix line 49: Hair residues altering water chemistry not documented
+[23:47:36] Fact fix line 55: Trail of water tracing his steps is speculative
+[23:47:36] Fact fix line 56: Copper and arsenic residues on hair affecting water not proven
+[23:47:36] Fact fix line 57: No record of rescue crew halting work on 23 September
+[23:47:36] Fact fix line 62: Water’s copper‑rich chemistry slowing decay is unverified
+[23:47:36] Fact check: 13 line(s) corrected (1553 -> 1448 words)
+[23:47:39] Waiting 45s for openai/gpt-oss-120b token budget
+[23:48:25] Story written with 21 AI requests
+[23:48:25] Voice for 66 scenes...
+[23:49:44] Voice: google, 5 requests for 66 scenes
+[23:49:44] Narration: 9.8 min
+[23:50:15] Caption sync: 1387/1467 words matched to the voice
+[23:50:15] Visuals...
+[23:50:15] Visuals 1/66
+[23:50:28] Visuals 11/66
+[23:50:50] Visuals 21/66
+[23:51:10] Visuals 31/66
+[23:51:23] Visuals 41/66
+[23:51:42] Visuals 51/66
+[23:51:53] Visuals 61/66
+[23:52:02] Visuals for 66/66 scenes - historical film 0, stock video 40, archive photos 20, other pictures 6 (AI-made 0)
+[23:52:02] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[23:52:02] Scene clips...
+[23:52:06] Clip 1/66
+[23:52:55] Clip 11/66
+[23:53:40] Clip 21/66
+[23:54:29] Clip 31/66
+[23:55:29] Clip 41/66
+[23:56:22] Clip 51/66
+[23:57:36] Clip 61/66
+[23:58:18] Music: track.mp3 ['Music: "Unseen Horrors" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
+[00:01:49] Sound effects: arrow thud, bird calls, breathing heavy, cloth rustle, crackling fire, crackling ice, crunch, dark drone, deep echo, drip drip, dripping water, fabric rustle, fire crackle, footsteps snow, forest wind, forge bellows, gentle water, heartbeat, howling wind, ice cracking, ice drill, impact thud, machin
+[00:01:54] Final long render...
+[00:25:57] Facts source: Wikipedia '1852 Banda Sea earthquake' (9391 chars)
+[00:25:57] Short 1 (on_this_day): 1852 Banda Sea earthquake (Wikipedia '1852 Banda Sea earthquake')
+[00:26:06] Fact fix line 2: Exaggerates that every house collapsed; source says nearly every home collapsed.
+[00:26:06] Fact fix line 5: Mentions ships lost, which is not supported by the source facts.
+[00:26:06] Fact check: 2 line(s) corrected (95 -> 95 words)
+[00:26:19] Visuals 1/8
+[00:26:26] Visuals for 8/8 scenes - historical film 0, stock video 6, archive photos 1, other pictures 1 (AI-made 0)
+[00:26:26] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[00:27:48] Short ready: short0.mp4 (43.4s, 8 lines, 'When the Sea Swallowed a Island')
+[00:27:50] Facts source: Wikipedia 'Hindenburg disaster' (69294 chars)
+[00:27:50] Short 2 (one_night): Hindenburg Disaster Night (Wikipedia 'Hindenburg disaster')
+[00:27:57] Waiting 27s for openai/gpt-oss-120b token budget
+[00:28:25] Fact fix line 1: Incorrect time and unsupported term “high‑altitude ‘flying moor’”
+[00:28:25] Fact check: 1 line(s) corrected (105 -> 104 words)
+[00:28:29] Title not backed by the facts: 'What Ignited the Hindenburg?' (Implies a definitive cause of ignition, but sources only list multiple theories.)
+[00:28:33] Title backed by the facts after rewriting: 'What Sparked the Hindenburg Tragedy?'
+[00:28:43] Short too long (55.0s) - writing it again
+[00:28:43] Waiting 36s for openai/gpt-oss-120b token budget
+[00:29:23] Waiting 19s for openai/gpt-oss-120b token budget
+[00:29:45] Fact fix line 5: mentions lightning, which is not supported by the source facts
+[00:29:45] Fact check: 1 line(s) corrected (101 -> 100 words)
+[00:29:49] Title not backed by the facts: 'What Ignited the Hindenburg?' (Title asserts a cause, but sources say multiple theories, no definitive cause)
+[00:29:52] Waiting 37s for openai/gpt-oss-120b token budget
+[00:30:29] Title backed by the facts after rewriting: 'The Mystery Behind the Hindenburg Fire'
+[00:30:45] Commons film skip File:Hindenberg explodes.ogv: could not convert string to float: 'N/A'
+[00:30:47] Scene 0 archive failed: HTTP Error 429: Your bot is making too many requests. Please reduce your request rate or contact bot-traffic@wikimedia.org (f263c81)
+[00:30:47] Visuals 1/7
+[00:31:08] Visuals for 7/7 scenes - historical film 1, stock video 1, archive photos 3, other pictures 2 (AI-made 0)
+[00:31:08] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[00:32:27] Short ready: short1.mp4 (44.4s, 7 lines, 'The Mystery Behind the Hindenburg Fire')
+[00:32:30] Long video ready: 9.8 min, 2 shorts
+[00:32:34] Uploaded https://youtu.be/tOXNEcCAAZU (public)
+[00:32:36] Thumbnail set
+[00:32:37] Subtitles (CC) uploaded
+[00:32:37] Added to playlist 'Unsolved Mysteries'
+[00:32:38] Comment posted: What do you think the months‑long water exposure tells us about Ötzi’s final hours?
+[00:32:40] Uploaded https://youtu.be/tX2LVILaem4 (private, publishes 2026-11-26T04:32:38Z)
+[00:32:42] Uploaded https://youtu.be/95wRWpaDx88 (private, publishes 2026-11-26T09:32:38Z)
