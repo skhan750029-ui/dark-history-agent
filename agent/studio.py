@@ -53,7 +53,9 @@ UA = ("DarkHistoryStudio/2.1 (https://github.com/skhan750029-ui/dark-history-age
 CHANNEL = os.getenv("CHANNEL_NAME", "Dark History")
 PRIVACY = (os.getenv("PRIVACY") or "public").strip().lower()
 LONG_MINUTES = float(os.getenv("LONG_MINUTES") or 11)
-SHORTS_COUNT = int(os.getenv("SHORTS_COUNT") or 2)
+# 3 Shorts a day. YouTube API quota (10,000 units/day): 4 uploads x 1,600 + captions 400 + thumbnail 50 +
+# playlist 100 + comment 50 = ~7,000 units, so 3 Shorts + the documentary fit with room to spare.
+SHORTS_COUNT = int(os.getenv("SHORTS_COUNT") or 3)
 SHORT_MIN, SHORT_MAX = 35.0, 44.5  # Shorts length in seconds
 LANG = (os.getenv("NARRATION_LANG") or "en").strip().lower()   # "en" = English narration, "ur" = Urdu
 TTS_VOICES = [v for v in [os.getenv("TTS_VOICE")] + (
@@ -362,6 +364,13 @@ SENSITIVE = re.compile(r"israel|palestin|gaza|west bank|zionis|hamas|hezbollah|n
                        r"election|politic|communis|fascis|militia|paramilitary|death squad", re.I)
 
 
+# terrorism / cartel or militant attacks (e.g. a bomb planted on a plane): never a topic, even when trending
+TERROR = re.compile(r"terroris|terrorist|cartel|hijack|militant|insurgen|guerrill|suicide bomb|car bomb|"
+                    r"letter bomb|planted (?:a |the )?bomb|bomb (?:was |had been )?planted|destroyed by a bomb|"
+                    r"bomb (?:on board|exploded on|aboard)|mid-?air bombing|bombing of (?:a |the )?(?:flight|plane|"
+                    r"airliner|train|bus)", re.I)
+
+
 def yt_trending(limit=15):
     """Dark-history videos with the most views in the last 3 weeks = topics already working in the niche."""
     key = os.getenv("YT_API_KEY") or os.getenv("GOOGLE_TTS_KEY")
@@ -516,12 +525,13 @@ def topic_log():
 
 
 def used_topics():
-    """Old topics (topics_done.txt, from before the 6-month rule) + every topic of the last 6 months."""
+    """Old topics (topics_done.txt, from before the 6-month rule) + every topic of the last 6 months -
+    documentaries AND Shorts, so a topic never appears in both within 6 months."""
     f = DATA / "topics_done.txt"
     old = [l.strip() for l in f.read_text(encoding="utf-8").splitlines() if l.strip()] if f.exists() else []
     since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=REPEAT_DAYS)
     recent = []
-    for r in topic_log():
+    for r in topic_log() + shorts_log():
         try:
             if dt.datetime.fromisoformat(r["date"]) >= since:
                 recent += [r.get("topic", ""), r.get("wikipedia", "")]
@@ -661,7 +671,8 @@ secrets of past wars. Each story must fit one of our series:
 Not any of:
 {avoid}
 Skip living people, wars or political conflicts that are still going on, massacres of civilians, race
-riots, mass shootings and any racial, religious or political violence.
+riots, mass shootings, terrorism and bomb attacks (e.g. a bomb on a plane), cartel or militant violence
+and any racial, religious or political violence.
 Return ONLY JSON: {{"topics": [{{"name": "short famous name of the story (2-4 words)",
 "wikipedia": "exact English Wikipedia article title", "query": "what people type on YouTube to find it",
 "series": "one series name from the list", "why": "which signal it matches"}}]}}""", keys=("topics",), max_tokens=1200)
@@ -672,7 +683,8 @@ Return ONLY JSON: {{"topics": [{{"name": "short famous name of the story (2-4 wo
         if c["series"] not in series:
             c["series"] = "Unsolved Mysteries"
         c["name"] = c["name"] or c["wikipedia"]
-        if not c["name"] or is_used(c["name"], done) or SENSITIVE.search(f"{c['name']} {c['wikipedia']}"):
+        if (not c["name"] or is_used(c["name"], done) or SENSITIVE.search(f"{c['name']} {c['wikipedia']}")
+                or TERROR.search(f"{c['name']} {c['wikipedia']} {c['why']}")):
             continue
         d = yt_demand(c["query"] or c["name"])
         if d is None and not YT_CHECKS["off"] and YT_CHECKS["left"] > 0:
@@ -692,8 +704,29 @@ def promised_topic(done):
         return None
     if p.get("name") and not is_used(p["name"], done) and p["name"] not in REJECTED:
         log(f"Topic promised by the last video: {p['name']}")
+        # a promise is kept: it was screened when it was promised (or comes from the hand-picked list), so a
+        # word in the AI's title can no longer throw it out
+        curated = {t["name"].lower() for t in json.loads(DARK_TOPICS_FILE.read_text(encoding="utf-8"))["topics"]}
+        p["curated"] = bool(p.get("checked") or p.get("curated") or p["name"].lower() in curated)
+        p["promised"] = True
         return p
     return None
+
+
+LONG_MIN_FACTS = int(os.getenv("LONG_MIN_FACTS") or 10000)  # a full video (8-11 min) needs a big article
+
+
+def topic_problem(pick, full):
+    """Why this topic can't be a documentary ('' if it can): too little to tell truthfully, or (for topics
+    not from the hand-picked list) a sensitive or terrorism story."""
+    if len(full) < LONG_MIN_FACTS:
+        return f"Wikipedia article too short for a full video ({len(full)} characters, need {LONG_MIN_FACTS})"
+    lead = full[:1500]
+    if TERROR.search(lead):
+        return "terrorism / cartel attack"
+    if not pick.get("curated") and SENSITIVE.search(lead[:800]):
+        return "sensitive topic"
+    return ""
 
 
 def choose_topic(done, extra_kinds=(), extra_series=(), use_promise=True):
@@ -810,6 +843,19 @@ def relevant_facts(full, about, limit=7000):
     return "\n".join((f"[{paras[i][0]}] " if paras[i][0] else "") + paras[i][1] for i in sorted(take))[:limit + 2000]
 
 
+def fix_grammar(title):
+    """Small title grammar fixes: a/an ('a Island' -> 'an Island', 'an Ship' -> 'a Ship'), double spaces,
+    a space before ? or !."""
+    t = re.sub(r"\s+", " ", title or "").strip()
+    t = re.sub(r"\s+([?!:,])", r"\1", t)
+    # 'an' before a vowel sound; not before 'one'/'uni'/'use'/'euro' (sound like 'w'/'y')
+    t = re.sub(r"\b([Aa])\s+(?=(?![Oo]ne\b|[Uu]ni|[Uu]s[eu]|[Uu]to|[Ee]u)[AEIOUaeiou]|[Hh]our|[Hh]onou?r|[Hh]eir)",
+               lambda m: m.group(1) + "n ", t)
+    t = re.sub(r"\b([Aa])n\s+(?=(?:[Oo]ne\b|[Uu]ni|[Uu]s[eu]|[Ee]u)|(?![AEIOUaeiou]|[Hh]our|[Hh]onou?r|[Hh]eir)\w)",
+               lambda m: m.group(1) + " ", t)
+    return t
+
+
 def verify_title(title, full, name, short=False):
     """The title must say only what the facts back up (with words copied from the article as proof).
     If not, the AI rewrites it and it is checked again; a title that cannot be backed up stops the upload."""
@@ -836,7 +882,10 @@ Return ONLY JSON: {{"supported": true or false, "problem": "short reason if not 
         if ok:
             if attempt:
                 log(f"Title backed by the facts after rewriting: '{title}'")
-            return title
+            fixed = fix_grammar(title)
+            if fixed != title:
+                log(f"Title grammar: '{title}' -> '{fixed}'")
+            return fixed
         log(f"Title not backed by the facts: '{title}' ({text(got.get('problem'), 'no proof in the article')[:150]})")
         new = text(got.get("better_title"))
         if short:
@@ -1100,22 +1149,34 @@ def write_story(minutes):
     pick = choose_topic(done)
     name = pick["name"]
     # the NEXT video's topic is chosen now, so this video can honestly tell viewers what comes next
-    nxt, nxt_facts = None, ""
-    try:
-        nxt = choose_topic(done + [name, pick.get("wikipedia", "")], extra_kinds=[pick["kind"]],
-                           extra_series=[pick["series"]], use_promise=False)
-        nxt_facts = wiki_extract(nxt["wikipedia"] or nxt["name"], chars=1500)
-    except Exception as e:
-        log(f"Next topic not chosen ({e}) - the video ends with a plain subscribe line")
-        nxt = None
+    # the NEXT topic is screened NOW (article size, terrorism, sensitive) so the promise can always be kept
+    nxt, nxt_facts, skip = None, "", [name, pick.get("wikipedia", "")]
+    for _ in range(3):
+        try:
+            cand = choose_topic(done + skip, extra_kinds=[pick["kind"]], extra_series=[pick["series"]],
+                                use_promise=False)
+            nfull = wiki_extract(cand["wikipedia"] or cand["name"], chars=60000)
+        except Exception as e:
+            log(f"Next topic not chosen ({e})")
+            break
+        why = topic_problem(cand, nfull)
+        if why:
+            log(f"Next topic '{cand['name']}' not promised: {why}")
+            skip += [cand["name"], cand.get("wikipedia", "")]
+            continue
+        nxt, nxt_facts = {**cand, "checked": True}, nfull[:1500]
+        break
+    if not nxt:
+        log("No next topic - the video ends with a plain subscribe line")
     # the WHOLE article: every chapter, the fact check and the title check get the parts they talk about
     # (before, only the first 8000 characters were used, so the later chapters had no facts and the AI
     # filled them from imagination)
     full = wiki_extract(pick["wikipedia"] or name, chars=60000)
     facts = full[:8000]
-    if len(facts) < 1500:
+    why = topic_problem(pick, full)
+    if why:
         REJECTED.append(name)
-        raise RuntimeError(f"not enough source facts for {name} ({len(facts)} chars) - picking another topic")
+        raise RuntimeError(f"{name}: {why} - picking another topic")
     rivals = "\n".join(f'- "{t}"' for t in (pick.get("demand") or {}).get("titles", [])) or "- (not checked)"
     if pick["kind"] == "evergreen":
         kind_note = f"""This is a FAMOUS story that people search for on YouTube every day, so many viewers know the
@@ -1205,7 +1266,8 @@ Return ONLY JSON:
     teaser = text(outline.get("next_teaser")).rstrip(".!") if nxt else ""
     if nxt and not (teaser and quote_found(text(outline.get("next_teaser_quote")), nxt_facts)):
         teaser = f"the true story of {nxt['name']}" if nxt else ""
-    outline["next"] = ({k: nxt.get(k) for k in ("name", "wikipedia", "query", "series", "kind", "demand", "why")}
+    outline["next"] = ({k: nxt.get(k) for k in ("name", "wikipedia", "query", "series", "kind", "demand", "why",
+                                                 "curated", "checked")}
                        | {"teaser": teaser}) if nxt else None
     src = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(outline['wikipedia'].replace(' ', '_'))}"
     if "wikipedia.org" not in outline["description"]:
@@ -2789,7 +2851,10 @@ def make_daily_shorts(story, work, offline):
     """The day's 2 Shorts: each its own story, style and topic (never the documentary's)."""
     if offline:
         return []
-    used, names = short_used_topics([story.get("topic", ""), story.get("wikipedia", "")])
+    # never today's documentary, nor the topic promised for the next one (it is reserved for that video)
+    nxt = story.get("next") or {}
+    used, names = short_used_topics([story.get("topic", ""), story.get("wikipedia", ""),
+                                     nxt.get("name") or "", nxt.get("wikipedia") or ""])
     out = []
     for style in pick_short_styles():
         if len(out) >= SHORTS_COUNT:
@@ -3177,6 +3242,7 @@ def main():
         post_question(tok, vid, story.get("comment_question"))
         now = dt.datetime.now(dt.timezone.utc)
         for k, sh in enumerate(shorts):
+            # public ~4 h, ~9 h and ~14 h after the documentary: always 5 hours (more than 3) apart
             when = (now + dt.timedelta(hours=4 + 5 * k)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
             t = f"{sh['title']} #shorts"
             # the famous name lives in the description, hashtag and tags (not at the start of the title)
