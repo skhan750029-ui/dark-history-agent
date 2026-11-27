@@ -1,1 +1,113 @@
-[01:57:34] Today's documentary is already uploaded - this backup run has nothing to do
+[23:51:44] Topic promised by the last video: Korean Air 007
+[23:51:44] Topic (trending, series Air Disasters): Korean Air 007 - views not checked
+[23:51:45] YouTube views for 'Black Dahlia': best 15,988,304, 16 videos over 100k
+[23:51:45] Topic (evergreen, series Nights That Shook America): Black Dahlia - best YouTube video 15,988,304 views, 16 over 100k
+[23:51:45] Facts source: Wikipedia 'Black Dahlia' (42873 chars)
+[23:51:46] Facts source: Wikipedia 'Korean Air Lines Flight 007' (75519 chars)
+[23:51:46] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[23:51:48] AI writer ok: groq openai/gpt-oss-120b
+[23:51:49] Angle not backed by the facts (How a simple navigation error turned a routine flight into the deadliest civilian shoot‑down of the ) - asking again
+[23:51:51] Waiting 24s for openai/gpt-oss-120b token budget
+[23:52:22] Story attempt 1 failed: topic tied to a living conflict, picking another: Korean Air 007
+[23:52:37] Trend signals: 15 YouTube, 12 Wikipedia, 10 anniversaries
+[23:52:39] YouTube views for 'Avianca Flight 203 bombing documentary': best 1,468,247, 4 videos over 100k
+[23:52:39] Topic (trending, series Air Disasters): Avianca Flight 203 - best YouTube video 1,468,247 views, 4 over 100k
+[23:52:40] YouTube views for 'Great Chicago Fire': best 1,833,749, 7 videos over 100k
+[23:52:40] Topic (evergreen, series Nights That Shook America): Great Chicago Fire - best YouTube video 1,833,749 views, 7 over 100k
+[23:52:40] Facts source: Wikipedia 'Great Chicago Fire' (20600 chars)
+[23:52:40] Facts source: Wikipedia 'Avianca Flight 203' (3720 chars)
+[23:52:42] Waiting 30s for openai/gpt-oss-120b token budget
+[23:53:22] groq openai/gpt-oss-120b: empty answer
+[23:53:29] AI writer ok: groq openai/gpt-oss-20b
+[23:53:29] Topic: Avianca Flight 203 (trending) | Avianca Flight 203: Bomb vs Faulty Fuel Pump | angle: New evidence suggests a faulty fuel pump may have triggered the explosion before the bomb detonated.
+[23:53:32] Waiting 13s for openai/gpt-oss-120b token budget
+[23:53:50] AI writer ok: groq openai/gpt-oss-120b
+[23:53:50] JSON broken (Extra data: line 1 column 3800 (char 3799)), asking once more
+[23:53:53] Waiting 25s for openai/gpt-oss-120b token budget
+[23:54:23] Chapter 1: 13 scenes
+[23:54:23] Chapter 2: 12 scenes
+[23:54:26] Waiting 18s for openai/gpt-oss-120b token budget
+[23:54:49] Chapter 3: 13 scenes
+[23:54:49] Chapter 4 only 213 of ~330 words, asking for the full length
+[23:54:52] Waiting 39s for openai/gpt-oss-120b token budget
+[23:55:34] Chapter 4: 13 scenes
+[23:55:37] Waiting 29s for openai/gpt-oss-120b token budget
+[23:56:09] Chapter 5: 12 scenes
+[23:56:12] Waiting 28s for openai/gpt-oss-120b token budget
+[23:56:41] Fact check: 0 line(s) corrected (1234 -> 1234 words)
+[23:56:45] Title not backed by the facts: 'Avianca Flight 203: Bomb vs Faulty Fuel Pump' (Title implies a fuel pump cause, but source states the plane was destroyed by a bomb.)
+[23:56:48] Title backed by the facts after rewriting: 'Avianca Flight 203: Bomb Destroyed the Plane'
+[23:56:48] Story written with 15 AI requests
+[23:56:48] Voice for 65 scenes...
+[23:57:59] Voice: google, 5 requests for 65 scenes
+[23:57:59] Narration: 8.8 min
+[23:58:29] Caption sync: 1200/1254 words matched to the voice
+[23:58:29] Visuals...
+[23:58:29] Visuals 1/65
+[23:58:48] Visuals 11/65
+[23:59:06] Visuals 21/65
+[23:59:33] Visuals 31/65
+[23:59:54] Visuals 41/65
+[00:00:21] Visuals 51/65
+[00:00:46] Visuals 61/65
+[00:00:54] Visuals for 65/65 scenes - historical film 1, stock video 37, archive photos 16, other pictures 11 (AI-made 0)
+[00:00:54] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[00:00:54] Scene clips...
+[00:00:58] Clip 1/65
+[00:01:59] Clip 11/65
+[00:02:43] Clip 21/65
+[00:03:25] Clip 31/65
+[00:04:01] Clip 41/65
+[00:04:44] Clip 51/65
+[00:05:39] Clip 61/65
+[00:06:01] Music: track.mp3 ['Music: "Long Note Four" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
+[00:09:34] Sound effects: airplane cabin, airport ambience, cabin chatter, camera click, cheering crowd, click, click recorder, clicking gauges, crackling fire, crowd chatter, crowd gasp, crowd murmur, dark drone, deep boom, distant boom, distant roar, distant thunder, engine hum, engine roar, explosion roar, flame roar, foo
+[00:09:38] Final long render...
+[00:32:47] Facts source: Wikipedia 'Bhopal disaster' (56309 chars)
+[00:32:47] Short 1 (hidden_truth): Bhopal Gas Tragedy (Wikipedia 'Bhopal disaster')
+[00:32:55] Waiting 20s for openai/gpt-oss-120b token budget
+[00:33:16] Fact check: 0 line(s) corrected (100 -> 100 words)
+[00:33:20] Title not backed by the facts: 'The Night the Silent Gas Struck' (Title calls the gas "silent" which is not stated in the facts.)
+[00:33:24] Title not backed by the facts: 'The Night the Toxic Gas Struck' (no proof in the article)
+[00:33:27] Waiting 37s for openai/gpt-oss-120b token budget
+[00:34:05] Title not backed by the facts: 'The Night the Toxic Gas Struck' (no proof in the article)
+[00:34:05] Short (hidden_truth) failed: title could not be backed by the facts - not uploading: 'The Night the Toxic Gas Struck'
+[00:34:11] Facts source: Wikipedia 'Roanoke Colony' (66336 chars)
+[00:34:11] Short 1 (vanished): Lost Roanoke Colony (Wikipedia 'Roanoke Colony')
+[00:34:19] Waiting 35s for openai/gpt-oss-120b token budget
+[00:34:55] Fact check: 0 line(s) corrected (96 -> 96 words)
+[00:35:15] Visuals 1/8
+[00:35:45] Visuals for 8/8 scenes - historical film 3, stock video 2, archive photos 3, other pictures 0 (AI-made 0)
+[00:35:45] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[00:37:09] Short ready: short0.mp4 (44.3s, 8 lines, 'What Vanished From Roanoke')
+[00:37:11] Facts source: Wikipedia 'Tunguska event' (54985 chars)
+[00:37:11] Short 2 (strange_accident): Tunguska Event (Wikipedia 'Tunguska event')
+[00:37:17] Short script (Tunguska Event): main claim not found in the facts - writing again
+[00:37:20] Waiting 27s for openai/gpt-oss-120b token budget
+[00:37:53] Waiting 22s for openai/gpt-oss-120b token budget
+[00:38:18] Fact fix line 0: Incorrect description of fireball as unseen
+[00:38:18] Fact check: 1 line(s) corrected (106 -> 106 words)
+[00:38:32] Short too long (55.6s) - writing it again
+[00:38:32] Waiting 27s for openai/gpt-oss-120b token budget
+[00:39:02] Short script (Tunguska Event): main claim not found in the facts - writing again
+[00:39:05] Waiting 24s for openai/gpt-oss-120b token budget
+[00:39:36] Waiting 24s for openai/gpt-oss-120b token budget
+[00:40:03] Fact fix line 2: Describes tree fall as a perfect circle, which is not supported; the pattern is radial.
+[00:40:03] Fact fix line 3: Implies a magnitude‑5 measurement at the time, whereas the magnitude was assigned later.
+[00:40:03] Fact check: 2 line(s) corrected (102 -> 103 words)
+[00:40:22] Visuals 1/8
+[00:40:40] Commons film skip File:Meteor Lights Up the Sky Above Western New York (CIRA 2026-05-27 - labels).webm: could not convert string to float: 'N/A'
+[00:40:40] Commons film skip File:Meteor Lights Up the Sky Above Western New York (CIRA 2026-05-27 - nolabels portrait).webm: Command failed: ffmpeg -y -user_agent DarkHistoryStudio/2.1 (https://github.com/skhan750029-ui/dark-history-agent; educa
+[00:40:41] Commons film skip File:Meteor Lights Up the Sky Above Western New York (CIRA 2026-05-27 - nolabels).webm: Command failed: ffmpeg -y -user_agent DarkHistoryStudio/2.1 (https://github.com/skhan750029-ui/dark-history-agent; educa
+[00:40:50] Scene 7 archive failed: HTTP Error 429: Your bot is making too many requests. Please reduce your request rate or contact bot-traffic@wikimedia.org (f263c81)
+[00:40:50] Visuals for 8/8 scenes - historical film 1, stock video 4, archive photos 1, other pictures 2 (AI-made 0)
+[00:40:50] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[00:41:56] Short ready: short1.mp4 (44.3s, 8 lines, 'What Shattered Siberian Forest in 1908?')
+[00:41:59] Long video ready: 8.8 min, 2 shorts
+[00:42:02] Uploaded https://youtu.be/N_k5EMBjOuE (public)
+[00:42:07] Thumbnail set
+[00:42:08] Subtitles (CC) uploaded
+[00:42:09] Added to playlist 'Air Disasters'
+[00:42:10] Comment posted: Do you think the bombing was truly to kill a presidential candidate or just a cartel power move?
+[00:42:13] Uploaded https://youtu.be/BunVABmpS6U (private, publishes 2026-11-27T04:42:10Z)
+[00:42:15] Uploaded https://youtu.be/gUzr7hV0-oY (private, publishes 2026-11-27T09:42:10Z)
