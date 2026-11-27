@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Dark History studio (v2) - one run makes and uploads:
-  * 1 long documentary (16:9, ~10-12 min, Urdu narration, English title)
+Dark History studio (v2) - one run a day makes and uploads:
+  * on Monday, Wednesday and Friday: 1 long documentary (16:9, 8-11 min) on a big famous topic
   * 2 YouTube Shorts (9:16), each its own complete true story on a different topic (5 rotating styles:
     on this day / vanished / strange accident / the night the... / hidden truth), not cut from the video
 
@@ -506,10 +506,12 @@ def wiki_extract(title, chars=4500):
 
 DARK_TOPICS_FILE = Path(__file__).resolve().parent / "dark_topics.json"
 REPEAT_DAYS = int(os.getenv("TOPIC_REPEAT_DAYS") or 183)
-EVERGREEN_SHARE = float(os.getenv("EVERGREEN_SHARE") or 0.7)
+# documentaries only on big, famous topics with a record of hundreds of thousands of views (3 a week get
+# few views on small topics); Shorts keep their own 5 styles
+EVERGREEN_SHARE = float(os.getenv("EVERGREEN_SHARE") or 1.0)
 MIN_TOP_VIEWS = int(os.getenv("MIN_TOP_VIEWS") or 500_000)   # best video on the topic
 MIN_100K_VIDEOS = int(os.getenv("MIN_100K_VIDEOS") or 3)     # and several videos over 100k views
-YT_CHECKS = {"left": int(os.getenv("YT_VIEW_CHECKS") or 4), "off": False}  # 100 quota units per new check
+YT_CHECKS = {"left": int(os.getenv("YT_VIEW_CHECKS") or 6), "off": False}  # 100 quota units per new check
 GENERIC = {"mystery", "curse", "history", "death", "what", "really", "true", "story", "lost", "disappearance",
            "murder", "murders", "disaster", "sinking", "event", "incident", "the", "ghost", "ship", "treasure"}
 LAST_WIKI = {"title": ""}
@@ -522,6 +524,73 @@ def topic_log():
     import csv
     with open(f, encoding="utf-8", newline="") as fh:
         return list(csv.DictReader(fh))
+
+
+# ---------------------------------------------------------------- weekly plan + thumbnail words
+# Documentaries on Monday, Wednesday and Friday only (LONG_DAYS); every day 3 Shorts. A "day" is the daily
+# slot from 13:00 UTC (GitHub often starts the run hours late, even after midnight UTC).
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def long_days():
+    raw = (os.getenv("LONG_DAYS") or "mon,wed,fri").lower()
+    if raw.strip() == "all":
+        return set(range(7))
+    return {i for i, n in enumerate(DAY_NAMES) if n[:3].lower() in raw}
+
+
+def long_video_day(now=None):
+    return video_day(now or dt.datetime.now(dt.timezone.utc), 13).weekday() in long_days()
+
+
+def next_long_day_name(now=None):
+    """The day of the NEXT documentary after today's slot (for 'Next time on ..., this Wednesday')."""
+    d = video_day(now or dt.datetime.now(dt.timezone.utc), 13)
+    for k in range(1, 8):
+        if (d + dt.timedelta(days=k)).weekday() in long_days():
+            return DAY_NAMES[(d + dt.timedelta(days=k)).weekday()]
+    return "next week"
+
+
+THUMB_STOP = {"the", "a", "an", "of", "in", "on", "at", "to", "and", "or", "is", "was", "it", "who", "what", "why",
+              "how", "his", "her", "their", "no", "not"}
+# words the last thumbnails used before the history was kept (e.g. 'HIDDEN' appeared again and again)
+THUMB_SEED = ["hidden"]
+
+
+def recent_thumb_words(n=10):
+    """Words on the last n documentaries' thumbnails (never used again)."""
+    rows = [r.get("thumb_text", "") for r in topic_log()][-n:]
+    words = {norm_word(w) for r in rows for w in r.split()} - THUMB_STOP - {""}
+    if sum(1 for r in rows if r) < n:
+        words |= set(THUMB_SEED)
+    return words
+
+
+def fresh_thumb_text(outline):
+    """Thumbnail text with no word from the last 10 thumbnails: asks the AI again once, then drops the
+    repeated words; never empty."""
+    banned = recent_thumb_words()
+    cur = text(outline.get("thumbnail_text"))
+    rep = lambda t: [w for w in t.split() if norm_word(w) in banned]
+    if not rep(cur) and cur:
+        return cur
+    log(f"Thumbnail text '{cur}' repeats a recent word ({', '.join(rep(cur))}) - asking for a new one")
+    try:
+        got = ask_json(f"""Write new thumbnail text (2-4 English words, capitals) for the YouTube documentary
+"{outline['title']}". It adds curiosity, does not repeat a word of the title, and uses NONE of these words:
+{', '.join(sorted(banned))}.
+Return ONLY JSON: {{"thumbnail_text": "..."}}""", keys=("thumbnail_text",), max_tokens=200)
+        new = text(got.get("thumbnail_text"))
+        if new and not rep(new):
+            return new
+    except Exception as e:
+        log(f"New thumbnail text failed: {e}")
+    kept = [w for w in cur.split() if norm_word(w) not in banned]
+    if len(kept) >= 2:
+        return " ".join(kept)
+    year = re.search(r"\b1[0-9]{3}\b|\b20[0-2][0-9]\b", outline.get("description", "") or "")
+    return " ".join(kept + ([year.group(0)] if year else ["THE", "TRUTH"]))[:40] or "THE TRUTH"
 
 
 def used_topics():
@@ -545,6 +614,8 @@ def pick_mode(extra_kinds=()):
     forced = (os.getenv("TOPIC_MODE") or "").strip().lower()
     if forced in ("evergreen", "trending"):
         return forced
+    if EVERGREEN_SHARE >= 1:  # documentaries: only big famous topics people search for (owner's choice)
+        return "evergreen"
     kinds = ([r.get("kind") for r in topic_log()] + list(extra_kinds))[-10:]
     if not kinds:
         return "evergreen"
@@ -636,22 +707,27 @@ def evergreen_pick(done, extra_series=()):
     recent = [r.get("series", "") for r in topic_log()][-8:] + list(extra_series)
     last_at = lambda s: max((i for i, x in enumerate(recent) if x == s), default=-1)
     fresh.sort(key=lambda t: (recent.count(t.get("series", "")), last_at(t.get("series", ""))))
-    best = None
+    best, unchecked = None, []
     for t in fresh[:12]:
         d = yt_demand(t["query"])
         if d is None:
             if YT_CHECKS["off"] or not (os.getenv("YT_API_KEY") or os.getenv("GOOGLE_TTS_KEY")):
                 log(f"Views check unavailable - using the well-known topic {t['name']}")
                 return {**t, "kind": "evergreen", "demand": None}
+            unchecked.append(t)
             continue  # out of checks for today: only cached topics are compared
         if proven(d):
             return {**t, "kind": "evergreen", "demand": d}
+        log(f"Famous topic '{t['name']}' skipped: best YouTube video only {d['top']:,} views")
         if not best or d["top"] > best["demand"]["top"]:
             best = {**t, "kind": "evergreen", "demand": d}
-    if best:
-        log(f"No checked evergreen topic reached the views bar - taking the strongest: {best['name']}")
+    # nothing proven among the checked ones: the strongest checked one only if it still has a big record
+    if best and best["demand"]["top"] >= MIN_TOP_VIEWS // 2:
+        log(f"No checked topic reached the views bar - taking the strongest: {best['name']}")
         return best
-    return {**fresh[0], "kind": "evergreen", "demand": None}
+    if unchecked:  # not checked yet today (quota): every topic on the hand-picked list is a famous one
+        return {**unchecked[0], "kind": "evergreen", "demand": None}
+    raise RuntimeError("no famous topic with a big YouTube views record available today")
 
 
 def trending_pick(done):
@@ -1236,7 +1312,7 @@ Return ONLY JSON:
   "hook_film": "2-4 English words for real historical film of this event on Wikimedia Commons, or empty",
   "question": "the central question of the video",
   "title": "{name}: <angle>, under 60 chars in total, curiosity + truthful",
-  "thumbnail_text": "2-4 English words, none of them in the title",
+  "thumbnail_text": "2-4 English words, none of them in the title, and NONE of these words used on our last thumbnails: {', '.join(sorted(recent_thumb_words())) or '-'}",
   "setting": "visual setting for all pictures: year/era, place, period details",
   "thumbnail_prompt": "English prompt for a dramatic photorealistic cinematic thumbnail image of the story's key moment, no text",
   "description": "English description: the FIRST 2 LINES carry the hook and the main search keyword (they show in search results), then a 3-5 line summary, then 'Sources:' with 2-4 real sources",
@@ -1274,7 +1350,9 @@ Return ONLY JSON:
         outline["description"] = outline["description"].rstrip() + f"\n\nSource: {src}"
     outline["description"] = (outline["description"].rstrip() + f"\n\n{outline['comment_question']} "
                               "Tell us in the comments.\n\n" + f"Series: {pick['series']}"
-                              + (f"\nNext time: {teaser[:1].upper() + teaser[1:]}." if teaser else ""))
+                              + (f"\nNext documentary ({next_long_day_name()}): {teaser[:1].upper() + teaser[1:]}."
+                                 if teaser else ""))
+    outline["thumbnail_text"] = fresh_thumb_text(outline)
     if SENSITIVE.search(" ".join([outline["topic"], outline["title"], outline["wikipedia"]])) and not pick.get("curated"):
         REJECTED.append(name)
         raise RuntimeError(f"topic tied to a living conflict, picking another: {name}")
@@ -1401,7 +1479,7 @@ Return ONLY JSON with one entry per chapter, in order:
     # last words of every video: a true "next time" + a reason to subscribe (added after the fact check,
     # which only knows this story's facts)
     nt = (outline.get("next") or {}).get("teaser")
-    end = (f"Next time on {CHANNEL}: {nt}. Subscribe so you don't miss it." if nt else
+    end = (f"Next time on {CHANNEL}, this {next_long_day_name()}: {nt}. Subscribe so you don't miss it." if nt else
            f"Subscribe to {CHANNEL} for the next true story history tried to forget.")
     last = scenes[-1] if scenes else {}
     scenes.append({"ur": end, "type": "video", "query": last.get("query") or "dark storm night",
@@ -2538,7 +2616,12 @@ def voice_line(line, wav, work):
     elif engine == "edge":
         edge_tts_voice(speakable(line), raw)
     else:
-        google_tts(speakable(line), raw)
+        try:
+            google_tts(speakable(line), raw)
+        except Exception as e:  # e.g. on a Shorts-only day, when no documentary voice was set up first
+            log(f"Google voice failed for a Short line ({str(e)[:100]}) - using the free backup voice")
+            VOICE_USED["engine"] = "edge"
+            edge_tts_voice(speakable(line), raw)
     # no silence before the first word: in a Short the voice starts on the very first frame
     run(["ffmpeg", "-y", "-i", raw, "-af", "silenceremove=start_periods=1:start_threshold=-45dB,"
          "highpass=f=70,acompressor=threshold=-18dB:ratio=3:attack=5:release=150,"
@@ -3187,6 +3270,89 @@ def grab(video, t, out):
     return out
 
 
+def latest_documentary():
+    """Link id of the newest uploaded documentary (Shorts on Shorts-only days point to it)."""
+    f = DATA / "upload_log.csv"
+    if not f.exists():
+        return ""
+    for line in reversed(f.read_text(encoding="utf-8").splitlines()):
+        if ",long," in line and "youtu.be/" in line:
+            return line.rsplit("youtu.be/", 1)[1].strip()
+    return ""
+
+
+def upload_shorts(tok, shorts, doc_vid):
+    """Uploads the day's Shorts, public ~4 h, ~9 h and ~14 h from now (always 5 hours apart)."""
+    results, rows = [], []
+    now = dt.datetime.now(dt.timezone.utc)
+    for k, sh in enumerate(shorts):
+        when = (now + dt.timedelta(hours=4 + 5 * k)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        t = f"{sh['title']} #shorts"
+        # the famous name lives in the description, hashtag and tags (not at the start of the title)
+        try:
+            svid, sst = yt_upload(tok, sh["path"], t, short_description(sh, sh["credits"], doc_vid),
+                                  [sh["topic"], "dark history", "history shorts", "true story",
+                                   sh["style"].replace("_", " ")], publish_at=when, synthetic=False)
+            results.append(("short", t, sst, svid))
+            rows.append({"date": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                         "style": sh["style"], "topic": sh["topic"], "wikipedia": sh["wikipedia"],
+                         "title": sh["title"], "video": f"https://youtu.be/{svid}"})
+        except Exception as e:
+            log(f"Short upload failed: {e}")
+    return results, rows
+
+
+def save_logs(results, short_rows):
+    import csv
+    if results:
+        with open(DATA / "upload_log.csv", "a", encoding="utf-8") as f:
+            for kind, t, st, vid in results:
+                f.write(f"{dt.datetime.now(dt.timezone.utc).isoformat()},{kind},\"{t}\",{st},https://youtu.be/{vid}\n")
+    if short_rows:  # Shorts topics: never again within 6 months
+        sf = DATA / "shorts_log.csv"
+        new = not sf.exists()
+        with open(sf, "a", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=SHORTS_LOG_FIELDS)
+            if new:
+                w.writeheader()
+            w.writerows(short_rows)
+
+
+def clean_work(work, keep):
+    import shutil
+    for p in work.iterdir():
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.name not in keep:
+            p.unlink(missing_ok=True)
+
+
+def shorts_only_day(a):
+    """Tuesday, Thursday, Saturday, Sunday: no documentary, the day's 3 Shorts only."""
+    log(f"Shorts-only day - documentaries are made on {', '.join(DAY_NAMES[i] for i in sorted(long_days()))}")
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M")
+    work = OUT / f"{stamp}-shorts"
+    work.mkdir(parents=True, exist_ok=True)
+    pick_music(240, work, stamp)  # music bed + hit for the Shorts (made by the documentary on other days)
+    make_hit(work / "hit.wav")
+    try:  # the topic promised for the next documentary stays reserved for it
+        nxt = json.loads((DATA / "next_topic.json").read_text(encoding="utf-8"))
+    except Exception:
+        nxt = {}
+    shorts = make_daily_shorts({"topic": "", "wikipedia": "", "next": nxt}, work, a.offline)
+    if not shorts and not a.offline:
+        raise RuntimeError("no Short could be made today")
+    if shorts:
+        preview([grab(s["path"], 4, work / f"pvs{n}.jpg") for n, s in enumerate(shorts)],
+                DATA / "previews" / "latest.jpg")
+    log(f"Shorts ready: {len(shorts)}")
+    results, short_rows = [], []
+    if shorts and not (a.offline or a.no_upload):
+        results, short_rows = upload_shorts(yt_token(), shorts, latest_documentary())
+    save_logs(results, short_rows)
+    clean_work(work, {s["path"].name for s in shorts})
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--offline", action="store_true")
@@ -3194,11 +3360,15 @@ def main():
     ap.add_argument("--script")
     a = ap.parse_args()
     DATA.mkdir(exist_ok=True)
+    long_day = bool(a.script) or long_video_day()
     log_f = DATA / "upload_log.csv"
+    marker = ",long," if long_day else ",short,"
     if (os.getenv("RUN_EVENT") == "schedule" and not (a.no_upload or a.offline or a.script) and log_f.exists()
-            and already_done(log_f.read_text(encoding="utf-8").splitlines(), ",long,", 13)):
-        log("Today's documentary is already uploaded - this backup run has nothing to do")
+            and already_done(log_f.read_text(encoding="utf-8").splitlines(), marker, 13)):
+        log(f"Today's {'documentary' if long_day else 'Shorts'} already uploaded - this backup run has nothing to do")
         return
+    if not long_day:
+        return shorts_only_day(a)
 
     story = json.loads(Path(a.script).read_text(encoding="utf-8")) if a.script else None
     if not story:
@@ -3240,58 +3410,30 @@ def main():
             yt_captions(tok, vid, srt)
         add_to_series(tok, vid, story.get("series"))
         post_question(tok, vid, story.get("comment_question"))
-        now = dt.datetime.now(dt.timezone.utc)
-        for k, sh in enumerate(shorts):
-            # public ~4 h, ~9 h and ~14 h after the documentary: always 5 hours (more than 3) apart
-            when = (now + dt.timedelta(hours=4 + 5 * k)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-            t = f"{sh['title']} #shorts"
-            # the famous name lives in the description, hashtag and tags (not at the start of the title)
-            try:
-                svid, sst = yt_upload(tok, sh["path"], t, short_description(sh, sh["credits"], vid),
-                                      [sh["topic"], "dark history", "history shorts", "true story",
-                                       sh["style"].replace("_", " ")], publish_at=when, synthetic=False)
-                results.append(("short", t, sst, svid))
-                short_rows.append({"date": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-                                   "style": sh["style"], "topic": sh["topic"], "wikipedia": sh["wikipedia"],
-                                   "title": sh["title"], "video": f"https://youtu.be/{svid}"})
-            except Exception as e:
-                log(f"Short upload failed: {e}")
+        more, short_rows = upload_shorts(tok, shorts, vid)
+        results += more
 
     if results:  # a --no-upload test run does not use up the topic
         import csv
-        fields = ["date", "topic", "wikipedia", "kind", "title", "angle", "video", "series"]
+        fields = ["date", "topic", "wikipedia", "kind", "title", "angle", "video", "series", "thumb_text"]
         rows = topic_log()
         rows.append({"date": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
                      "topic": story["topic"].strip(), "wikipedia": story.get("wikipedia", ""),
                      "kind": story.get("kind", "trending"), "title": story["title"],
                      "angle": text(story.get("angle"))[:200], "video": f"https://youtu.be/{results[0][3]}",
-                     "series": story.get("series", "")})
+                     "series": story.get("series", ""), "thumb_text": story.get("thumbnail_text", "")})
         with open(DATA / "topics_log.csv", "w", encoding="utf-8", newline="") as f:  # rewritten: header may grow
             w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
             w.writeheader()
             w.writerows(rows)
-        if story.get("next"):  # the promise made at the end of this video decides the next topic
+        # the promise made at the end of this video decides the next topic; no promise -> none kept
+        if story.get("next"):
             (DATA / "next_topic.json").write_text(json.dumps(story["next"], ensure_ascii=False, default=str),
                                                   encoding="utf-8")
-        with open(DATA / "upload_log.csv", "a", encoding="utf-8") as f:
-            for kind, t, st, vid in results:
-                f.write(f"{dt.datetime.now(dt.timezone.utc).isoformat()},{kind},\"{t}\",{st},https://youtu.be/{vid}\n")
-    if short_rows:  # Shorts topics: never again within 6 months
-        import csv
-        sf = DATA / "shorts_log.csv"
-        new = not sf.exists()
-        with open(sf, "a", encoding="utf-8", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=SHORTS_LOG_FIELDS)
-            if new:
-                w.writeheader()
-            w.writerows(short_rows)
-    import shutil
-    keep = {"long.mp4", "thumb.jpg", "story.json", "captions.srt"} | {s["path"].name for s in shorts}
-    for p in work.iterdir():
-        if p.is_dir():
-            shutil.rmtree(p, ignore_errors=True)
-        elif p.name not in keep:
-            p.unlink(missing_ok=True)
+        else:
+            (DATA / "next_topic.json").unlink(missing_ok=True)
+    save_logs(results, short_rows)
+    clean_work(work, {"long.mp4", "thumb.jpg", "story.json", "captions.srt"} | {s["path"].name for s in shorts})
 
 
 if __name__ == "__main__":
