@@ -1,1 +1,186 @@
-[01:56:05] Today's documentary is already uploaded - this backup run has nothing to do
+[23:27:36] Topic promised by the last video: Great Chicago Fire
+[23:27:36] Topic (evergreen, series Nights That Shook America): Great Chicago Fire - best YouTube video 1,833,749 views, 7 over 100k
+[23:27:36] Topic (evergreen, series Secrets of War): Operation Mincemeat - best YouTube video 3,385,446 views, 19 over 100k
+[23:27:37] Facts source: Wikipedia 'Operation Mincemeat' (37537 chars)
+[23:27:37] Facts source: Wikipedia 'Great Chicago Fire' (20600 chars)
+[23:27:37] AI writers: groq:gpt-oss-120b, groq:gpt-oss-20b, groq:qwen3.8-27b, cloudflare:llama-3.3-70b-instruct-fp8-fast, cloudflare:llama-4-scout-17b-16e-instruct, cloudflare:mistral-small-3.1-24b-instruct
+[23:27:46] AI writer ok: groq openai/gpt-oss-120b
+[23:27:46] Thumbnail text 'Hidden Fuel' repeats a recent word (Hidden) - asking for a new one
+[23:27:49] Topic: Great Chicago Fire (evergreen) | Great Chicago Fire: How the River Became a Fiery Conveyor | angle: The fire’s rapid spread was fueled by a hidden cache of lumber and coal yards along the Chicago River, turning a natural firebreak into a deadly conduit.
+[23:27:52] Waiting 34s for openai/gpt-oss-120b token budget
+[23:28:34] Chapter 1: 15 scenes
+[23:28:34] Chapter 2: 13 scenes
+[23:28:37] Waiting 30s for openai/gpt-oss-120b token budget
+[23:29:14] Chapter 3: 13 scenes
+[23:29:14] Chapter 4: 12 scenes
+[23:29:17] Waiting 30s for openai/gpt-oss-120b token budget
+[23:29:50] Chapter 5: 13 scenes
+[23:29:50] Note: chapter 2 has no exact year in it
+[23:29:53] Waiting 34s for openai/gpt-oss-120b token budget
+[23:30:32] Fact fix line 2: Specifies whiskey and a party not supported by facts
+[23:30:32] Fact fix line 7: Metal shutters warping and melting not mentioned in sources
+[23:30:32] Fact fix line 8: Well running dry weeks before is not in the facts
+[23:30:32] Fact fix line 10: Citizens clapping to fan flames is invented
+[23:30:32] Fact fix line 20: Water seeming to boil is not supported
+[23:30:32] Fact fix line 24: Rain beginning to fall is not recorded in sources
+[23:30:32] Fact fix line 25: River described as a black ribbon of ash and oil is not in facts
+[23:30:32] Fact fix line 31: Specific beam landing on a coal yard on the Near North Side is not documented
+[23:30:32] Fact fix line 33: Bridges described as wooden arches catching fire is not in sources
+[23:30:32] Fact fix line 36: Firefighters drenched in ash retreating is not mentioned
+[23:30:32] Fact fix line 37: River surface turning into a mirror of fire is invented
+[23:30:32] Fact fix line 42: Investigators’ findings about lumber yards as hidden engines are not in facts
+[23:30:32] Fact fix line 44: Mayor’s testimony about coal yard fuel stores is not documented
+[23:30:32] Fact fix line 46: Gas works explosion is not supported; only a hiss was reported
+[23:30:32] Fact fix line 54: Lieutenant General Philip H. Sheridan taking command is not in sources
+[23:30:32] Fact fix line 55: Mayor proclaiming martial law is not mentioned in facts
+[23:30:32] Fact check: 16 line(s) corrected (1849 -> 1772 words)
+[23:30:35] Waiting 48s for openai/gpt-oss-120b token budget
+[23:31:23] Title not backed by the facts: 'Great Chicago Fire: How the River Became a Fiery Conveyor' (Implies the river acted as a conveyor of fire, which the facts do not state)
+[23:31:27] Title not backed by the facts: 'Great Chicago Fire: How the Flames Jumped the River' (no proof in the article)
+[23:31:31] Title not backed by the facts: 'Great Chicago Fire: How the Flames Jumped the River' (no proof in the article)
+[23:31:31] Story attempt 1 failed: title could not be backed by the facts - not uploading: 'Great Chicago Fire: How the Flames Jumped the River'
+[23:31:31] Topic promised by the last video: Great Chicago Fire
+[23:31:31] Topic (evergreen, series Nights That Shook America): Great Chicago Fire - best YouTube video 1,833,749 views, 7 over 100k
+[23:31:31] Topic (evergreen, series Secrets of War): Operation Mincemeat - best YouTube video 3,385,446 views, 19 over 100k
+[23:31:31] Facts source: Wikipedia 'Operation Mincemeat' (37537 chars)
+[23:31:31] Facts source: Wikipedia 'Great Chicago Fire' (20600 chars)
+[23:31:34] Waiting 41s for openai/gpt-oss-120b token budget
+[23:32:17] Angle not backed by the facts (The fire was sparked not by a cow, but by Daniel "Peg‑Leg" Sullivan knocking over a lantern while se) - asking again
+[23:32:20] Waiting 31s for openai/gpt-oss-120b token budget
+[23:32:54] Topic: Great Chicago Fire (evergreen) | Great Chicago Fire: How the River Became a Fuel Line | angle: The river that should have stopped the blaze was actually a tinderbox of lumber and coal yards, turning it into a massive fuel line.
+[23:32:57] Waiting 18s for openai/gpt-oss-120b token budget
+[23:33:22] Chapter 1: 13 scenes
+[23:33:22] Chapter 2: 12 scenes
+[23:33:25] Waiting 25s for openai/gpt-oss-120b token budget
+[23:33:57] Chapter 3: 13 scenes
+[23:33:57] Chapter 4: 12 scenes
+[23:34:00] Waiting 49s for openai/gpt-oss-120b token budget
+[23:34:52] Chapter 5: 13 scenes
+[23:34:52] Note: chapter 2 has no exact year in it
+[23:34:55] Waiting 21s for openai/gpt-oss-120b token budget
+[23:35:18] Fact fix line 5: Chief John H. Kinzie not mentioned in source
+[23:35:18] Fact fix line 42: Bridges built of wood not supported
+[23:35:18] Fact fix line 44: Exact midnight time not supported
+[23:35:18] Fact fix line 45: Historians now agree statement unsupported
+[23:35:18] Fact fix line 46: Survivor recall of fire whirl not documented
+[23:35:18] Fact fix line 47: River current turned into carrier claim unsupported
+[23:35:18] Fact fix line 52: Building count and loss amount not in source
+[23:35:18] Fact fix line 60: Ban on wooden walls not supported
+[23:35:18] Fact check: 8 line(s) corrected (1701 -> 1684 words)
+[23:35:21] Waiting 39s for openai/gpt-oss-120b token budget
+[23:36:00] Title not backed by the facts: 'Great Chicago Fire: How the River Became a Fuel Line' (no proof in the article)
+[23:36:04] Title not backed by the facts: 'Great Chicago Fire: How the River Became a Fuel Line' (Implies the river acted as a fuel line, which is not stated in the facts.)
+[23:36:08] Title not backed by the facts: 'Great Chicago Fire: The River’s Role in Spreading the Blaze' (no proof in the article)
+[23:36:08] Story attempt 2 failed: title could not be backed by the facts - not uploading: 'Great Chicago Fire: The River’s Role in Spreading the Blaze'
+[23:36:08] Topic promised by the last video: Great Chicago Fire
+[23:36:08] Topic (evergreen, series Nights That Shook America): Great Chicago Fire - best YouTube video 1,833,749 views, 7 over 100k
+[23:36:08] Topic (evergreen, series Secrets of War): Operation Mincemeat - best YouTube video 3,385,446 views, 19 over 100k
+[23:36:08] Facts source: Wikipedia 'Operation Mincemeat' (37537 chars)
+[23:36:09] Facts source: Wikipedia 'Great Chicago Fire' (20600 chars)
+[23:36:11] Waiting 40s for openai/gpt-oss-120b token budget
+[23:36:54] Angle not backed by the facts (New research shows the fire likely started when Daniel “Peg‑Leg” Sullivan knocked over a lantern, no) - asking again
+[23:36:57] Waiting 39s for openai/gpt-oss-120b token budget
+[23:37:39] Topic: Great Chicago Fire (evergreen) | Great Chicago Fire: The Night Three Fires Ignited | angle: The Great Chicago Fire was one of three massive, simultaneous Lake‑Michigan fires sparked by the same dry, windy weather pattern.
+[23:37:42] Waiting 17s for openai/gpt-oss-120b token budget
+[23:38:06] Chapter 1: 12 scenes
+[23:38:06] Chapter 2: 12 scenes
+[23:38:09] Waiting 26s for openai/gpt-oss-120b token budget
+[23:38:40] Chapter 3: 12 scenes
+[23:38:40] Chapter 4: 12 scenes
+[23:38:43] Waiting 57s for openai/gpt-oss-120b token budget
+[23:39:43] Chapter 5: 13 scenes
+[23:39:43] Note: chapter 3 has no exact year in it
+[23:39:46] Waiting 21s for openai/gpt-oss-120b token budget
+[23:40:07] Fact check: 0 line(s) corrected (1370 -> 1370 words)
+[23:40:10] Waiting 45s for openai/gpt-oss-120b token budget
+[23:40:57] Story written with 25 AI requests
+[23:40:57] Voice for 63 scenes...
+[23:42:13] Voice: google, 5 requests for 63 scenes
+[23:42:13] Narration: 9.6 min
+[23:42:32] Caption sync: 1347/1391 words matched to the voice
+[23:42:32] Visuals...
+[23:42:34] Visuals 1/63
+[23:42:41] Visuals 11/63
+[23:42:47] Visuals 21/63
+[23:42:54] Visuals 31/63
+[23:43:07] Visuals 41/63
+[23:43:24] Visuals 51/63
+[23:43:35] Visuals 61/63
+[23:43:36] Visuals for 63/63 scenes - historical film 0, stock video 53, archive photos 7, other pictures 3 (AI-made 0)
+[23:43:36] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[23:43:36] Scene clips...
+[23:43:37] Clip 1/63
+[23:44:34] Clip 11/63
+[23:45:30] Clip 21/63
+[23:46:10] Clip 31/63
+[23:46:47] Clip 41/63
+[23:47:29] Clip 51/63
+[23:48:05] Clip 61/63
+[23:48:16] Music: track.mp3 ['Music: "Unseen Horrors" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/']
+[23:51:01] Sound effects: bell toll, cargo thud, church bells, construction clang, crackling fire, creaking wood, crowd gasp, crowd murmur, dark drone, distant bells, distant howl, door creak, dry wind, dust swirl, explosion crack, explosive roar, fire crackle, flame whoosh, footsteps hurried, forest rustle, gavel bang, hamm
+[23:51:04] Final long render...
+[00:09:05] Facts source: Wikipedia 'Dyatlov Pass incident' (32776 chars)
+[00:09:05] Short 1 (hidden_truth): Dyatlov Pass Incident (Wikipedia 'Dyatlov Pass incident')
+[00:09:12] Waiting 20s for openai/gpt-oss-120b token budget
+[00:09:37] Fact fix line 2: Invented detail about a sudden force driving hikers into the storm not supported by facts
+[00:09:37] Fact check: 1 line(s) corrected (84 -> 84 words)
+[00:09:41] Title not backed by the facts: 'The Night the Ural Hikers Vanished' (Implies the hikers vanished, but facts state their bodies were found dead.)
+[00:09:44] Waiting 46s for openai/gpt-oss-120b token budget
+[00:10:30] Title backed by the facts after rewriting: 'The Night the Ural Hikers Died'
+[00:10:37] Visuals 1/8
+[00:10:45] Visuals for 8/8 scenes - historical film 0, stock video 5, archive photos 2, other pictures 1 (AI-made 0)
+[00:10:45] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[00:11:36] Short ready: short0.mp4 (38.8s, 8 lines, 'The Night the Ural Hikers Died')
+[00:11:36] Facts source: Wikipedia 'Mount Erebus disaster' (33689 chars)
+[00:11:36] Short 2 (on_this_day): Mount Erebus disaster (Wikipedia 'Mount Erebus disaster')
+[00:11:45] Fact fix line 0: Incorrect verb; plane crashed, not vanished.
+[00:11:45] Fact fix line 6: Wrong timing of coordinate change; it was made the morning of the flight, not the night before.
+[00:11:45] Fact check: 2 line(s) corrected (111 -> 113 words)
+[00:11:48] Waiting 43s for openai/gpt-oss-120b token budget
+[00:12:31] Title not backed by the facts: 'The Hidden Path to a Frozen Volcano' (Title implies a secret 'hidden path' as cause, which is not stated as fact.)
+[00:12:35] Title not backed by the facts: 'What Misled the Crew to Crash on Erebus?' (no proof in the article)
+[00:12:39] Title not backed by the facts: 'What Misled the Crew to Crash on Erebus?' (no proof in the article)
+[00:12:39] Short (on_this_day) failed: title could not be backed by the facts - not uploading: 'What Misled the Crew to Crash on Erebus?'
+[00:12:44] Facts source: Wikipedia 'Titanic' (95415 chars)
+[00:12:44] Short 2 (one_night): Titanic Sinks (Wikipedia 'Titanic')
+[00:12:47] Waiting 36s for openai/gpt-oss-120b token budget
+[00:13:28] Waiting 26s for openai/gpt-oss-120b token budget
+[00:13:56] Fact fix line 2: The iceberg did not rip open the hull; it struck and dented it, causing flooding.
+[00:13:56] Fact check: 1 line(s) corrected (94 -> 96 words)
+[00:14:08] Short too long (50.3s) - writing it again
+[00:14:08] Waiting 26s for openai/gpt-oss-120b token budget
+[00:14:44] Fact fix line 1: invented detail about timing of flooding
+[00:14:44] Fact fix line 5: incorrect description of hull splitting
+[00:14:44] Fact check: 2 line(s) corrected (107 -> 107 words)
+[00:14:47] Waiting 51s for openai/gpt-oss-120b token budget
+[00:15:49] Short (one_night) failed: Short too long (53.5s)
+[00:15:50] Facts source: Wikipedia 'USS Cyclops' (14072 chars)
+[00:15:50] Short 2 (vanished): The Vanishing of the USS Cyclops (Wikipedia 'USS Cyclops')
+[00:15:59] Waiting 24s for openai/gpt-oss-120b token budget
+[00:16:24] Fact check: 0 line(s) corrected (108 -> 108 words)
+[00:16:40] Visuals 1/7
+[00:17:06] Visuals for 7/7 scenes - historical film 2, stock video 3, archive photos 2, other pictures 0 (AI-made 0)
+[00:17:06] AI-made realistic pictures in the video: 0 scene(s) -> synthetic-content label off
+[00:18:09] Short ready: short1.mp4 (44.4s, 7 lines, 'What Vanished Over the Atlantic')
+[00:18:11] Facts source: Wikipedia 'Texas City disaster' (20132 chars)
+[00:18:11] Short 3 (strange_accident): Texas City Disaster (Wikipedia 'Texas City disaster')
+[00:18:20] Waiting 18s for openai/gpt-oss-120b token budget
+[00:18:51] Fact fix line 1: Incorrect detail about water being used; the crew actually only tried to douse the fire, water was not applied.
+[00:18:51] Fact fix line 2: Invented detail that bags felt hot; source only mentions heating and smoke.
+[00:18:51] Fact fix line 4: Misidentifies Highflyer as a tanker and describes a crash; it was a cargo ship that drifted against Wilson B. Keene.
+[00:18:51] Fact check: 3 line(s) corrected (111 -> 111 words)
+[00:18:54] Waiting 50s for openai/gpt-oss-120b token budget
+[00:19:53] Short too long (50.9s) - writing it again
+[00:19:55] Short script (Texas City Disaster): main claim not found in the facts - writing again
+[00:19:58] Waiting 32s for openai/gpt-oss-120b token budget
+[00:20:34] Short script (Texas City Disaster): main claim not found in the facts - writing again
+[00:20:40] Short script (Texas City Disaster): main claim not found in the facts - writing again
+[00:20:40] Short (strange_accident) failed: no usable Short script for Texas City Disaster
+[00:20:41] Long video ready: 9.6 min, 2 shorts
+[00:20:44] Uploaded https://youtu.be/8bgBX7AWMko (public)
+[00:20:46] Thumbnail set
+[00:20:47] Subtitles (CC) uploaded
+[00:20:47] Added to playlist 'Nights That Shook America'
+[00:20:48] Comment posted: Do you think the O'Leary cow story ever happened?
+[00:20:50] Uploaded https://youtu.be/TDVIdtalb4o (private, publishes 2026-11-28T04:20:48Z)
+[00:20:52] Uploaded https://youtu.be/WCK0oqOobpE (private, publishes 2026-11-28T09:20:48Z)
